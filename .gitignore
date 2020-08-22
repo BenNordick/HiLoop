@@ -1,5 +1,7 @@
+.vscode/
 bin/
 lib/
+lib64
 share/
 site-packages/
 pyvenv.cfg
