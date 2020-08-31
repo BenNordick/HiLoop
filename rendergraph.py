@@ -15,4 +15,10 @@ def rendergraph(graph, filename):
 def colorcycle(graph, cycle, color, mix_color):
     for i in range(len(cycle)):
         edge = graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]
-        edge['color'] = mix_color if ('color' in edge) else color
+        if 'color' in edge:
+            if isinstance(mix_color, dict):
+                edge['color'] = mix_color[edge['color']]
+            else:
+                edge['color'] = mix_color
+        else:
+            edge['color'] = color

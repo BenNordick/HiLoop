@@ -26,47 +26,50 @@ def countmotifs(network):
                 shared_edges = cycle_edge_sets[holder1].intersection(cycle_edge_sets[holder2])
                 if len(shared_edges) > 0:
                     cycle_edge_graph.add_edge(holder1, holder2, shared=shared_edges)
-    #print('Finding triangles')
-    #cycle_triangles = findtriangles(cycle_graph)
+    def coverextracycle(holder1, holder2, ignoring=None):
+        for common_neighbor in set(cycle_edge_graph[holder1]).intersection(set(cycle_edge_graph[holder2])):
+            if common_neighbor is ignoring:
+                continue
+            if cycle_edge_sets[common_neighbor] < cycle_edge_sets[holder1].union(cycle_edge_sets[holder2]):
+                return True
+        return False
+    print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
+    print('Searching for Type I motifs')
+    checked = 0
+    type1 = 0
+    for a, b, c in findtriangles(cycle_graph):
+        shared_nodes = cycle_graph.edges[a, b]['shared'].intersection(cycle_graph.edges[b, c]['shared'])
+        if len(shared_nodes) == 0:
+            continue
+        if not shared_nodes.isdisjoint(cycle_graph.edges[a, c]['shared']):
+            if coverextracycle(a, b, c) or coverextracycle(a, c, b) or coverextracycle(b, c, a):
+                continue # TODO: Avoid rejecting emergent cycles that are necessary to the motif
+            type1 += 1
+        checked += 1
     print('Searching for Type II motifs')
     checked = 0
     type2 = 0
     for holder in cycle_sets:
         neighbors = list(cycle_graph.neighbors(holder))
-        edge_sharing_neighbors = set(cycle_edge_graph[holder])
         for i1, neigh1 in enumerate(neighbors):
-            esns1 = set(cycle_edge_graph[neigh1])
-            extra_cycle = False
-            for esn in esns1.intersection(edge_sharing_neighbors):
-                if cycle_edge_sets[esn] < cycle_edge_sets[holder].union(cycle_edge_sets[neigh1]):
-                    extra_cycle = True
-                    break
-            if extra_cycle:
+            if coverextracycle(holder, neigh1):
                 continue
             for i2 in range(i1 + 1, len(neighbors)):
                 neigh2 = neighbors[i2]
                 if cycle_graph.has_edge(neigh1, neigh2):
                     continue
-                esns2 = set(cycle_edge_graph[neigh2])
-                extra_cycle = False
-                for esn in esns2.intersection(edge_sharing_neighbors):
-                    if cycle_edge_sets[esn] < cycle_edge_sets[holder].union(cycle_edge_sets[neigh2]):
-                        extra_cycle = True
-                        break
-                if extra_cycle:
+                if coverextracycle(holder, neigh2):
                     continue
                 type2 += 1
         checked += 1
         print(f'{checked}\r', end='')
-    # TODO: Type 1         
-    return (len(cycle_sets), 0, type2)
+    return (len(cycle_sets), type1, type2)
 
 def findtriangles(graph):
-    triangles = set()
     for a, b in graph.edges:
         for c in frozenset(graph[a]).intersection(frozenset(graph[b])):
-            triangles.add(frozenset([a, b, c]))
-    return triangles
+            if c.isbefore(a) and c.isbefore(b):
+                yield (a, b, c)
 
 if __name__ == "__main__":
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(sys.argv[1]))

@@ -12,4 +12,6 @@ class IdentityHolder:
         return 'IdentityHolder(' + repr(self.value) + ', ' + repr(self.tag) + ')'
     def order(self, other):
         return (self, other) if id(self.value) < id(other.value) else (other, self)
+    def isbefore(self, other):
+        return id(self.value) < id(other.value)
         
