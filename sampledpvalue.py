@@ -1,6 +1,6 @@
 from minimumtopologies import ispositive
 import networkx as nx
-from permutenetwork import permutenetwork
+import permutenetwork
 import random
 import sys
 
@@ -35,13 +35,18 @@ def summarize(graph, samples):
     pfls = len([0 for cycle in cycles if cycle[1]])
     return pfls, type1, type2
 
-def evaluate(graph, permutations, samples):
-    base_results = summarize(graph, samples)
+def evaluate(graph, permutations, samples, base_trials=10):
+    base_samples = summarize(graph, samples * base_trials)
+    base_results = (base_samples[0], base_samples[1] / base_trials, base_samples[2] / base_trials)
     print('Base results:', base_results)
     permutation_results = [[], [], []]
-    for _ in range(permutations):
-        permutation = permutenetwork(graph)
-        for component, value in enumerate(summarize(permutation, samples)):
+    last_permutation = graph
+    for n in range(permutations):
+        if n % 20 == 0:
+            last_permutation = permutenetwork.permutenetwork(graph)
+        else:
+            last_permutation = permutenetwork.permuteedgeswaps(permutenetwork.permuteregulations(last_permutation))
+        for component, value in enumerate(summarize(last_permutation, samples)):
             permutation_results[component].append(value)
     p_values = []
     for component, value in enumerate(base_results):
