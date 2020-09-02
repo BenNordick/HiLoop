@@ -59,6 +59,7 @@ def randomsubgraph(graph, max_nodes):
     return graph.subgraph(selected)
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None):
+    base_connected = nx.algorithms.is_strongly_connected(graph)
     if max_nodes_for_sample is None:
         base_samples = summarize(graph, samples * base_trials)
         base_results = (base_samples[0], base_samples[1] / base_trials, base_samples[2] / base_trials)
@@ -67,18 +68,24 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
         for _ in range(base_trials):
             feasible_base_subgraph = randomsubgraph(graph, max_nodes_for_sample)
             for component, value in enumerate(summarize(feasible_base_subgraph, samples)):
-                base_results[component] += value / base_trials
+                base_results[component] += value
+        for component in range(len(base_results)):
+            base_results[component] /= base_trials
     print('Base results:', base_results)
     permutation_results = [[], [], []]
     last_permutation = graph
-    for n in range(permutations):
-        if n % 20 == 0 and use_full_permutation:
+    checked_permutations = 0
+    while checked_permutations < permutations:
+        if checked_permutations % 20 == 0 and use_full_permutation:
             last_permutation = permutenetwork.permutenetwork(graph)
         else:
             last_permutation = permutenetwork.permuteedgeswaps(permutenetwork.permuteregulations(last_permutation))
+        if base_connected and not nx.algorithms.is_strongly_connected(last_permutation):
+            continue
         feasible_subgraph = last_permutation if max_nodes_for_sample is None else randomsubgraph(last_permutation, max_nodes_for_sample)
         for component, value in enumerate(summarize(feasible_subgraph, samples)):
             permutation_results[component].append(value)
+        checked_permutations += 1
     p_values = []
     for component, value in enumerate(base_results):
         extreme_counts = 0
