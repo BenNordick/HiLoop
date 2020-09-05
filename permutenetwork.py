@@ -20,13 +20,19 @@ def permutenetwork(graph):
         return flattened
 
 def permuteedgeswaps(graph):
-    '''Attempts a random number of double edge swaps in place.'''
+    '''Attempts a random number of double edge swaps and directed triangle reversals in place.'''
     for _ in range(int(len(graph.edges) * (1 + 2 * random.random()))):
         edges = list(graph.edges)
         ab, cd = random.sample(edges, 2)
         a, b = ab
         c, d = cd
         if graph.has_edge(a, d) or graph.has_edge(c, b):
+            a_pred = list(graph.predecessors(a))
+            if len(a_pred) == 0:
+                continue
+            e = random.choice(a_pred)
+            if e != b and graph.has_edge(b, e):
+                reversedirectedtriangle(graph, a, b, e)
             continue
         ab_data = graph.edges[ab]
         cd_data = graph.edges[cd]
@@ -35,6 +41,14 @@ def permuteedgeswaps(graph):
         graph.add_edge(a, d, **ab_data)
         graph.add_edge(c, b, **cd_data)
     return graph
+
+def reversedirectedtriangle(graph, a, b, c):
+    for src, dest in [(a, b), (b, c), (c, a)]:
+        if graph.has_edge(dest, src):
+            continue
+        data = graph.edges[src, dest]
+        graph.remove_edge(src, dest)
+        graph.add_edge(dest, src, **data)
         
 def permuteregulations(graph):
     '''Randomly changes which regulations are repressions, maintaining activation and repression counts and directions.'''
