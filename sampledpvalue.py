@@ -23,20 +23,16 @@ def istype2(cycle_sets):
     return False
 
 def summarize(graph, samples):
-    cycles = [(IdentityHolder(frozenset(cycle)), ispositive(graph, cycle)) for cycle in nx.algorithms.simple_cycles(graph)]
+    cycles = [(frozenset(cycle), ispositive(graph, cycle)) for cycle in nx.algorithms.simple_cycles(graph)]
     pfls = len([0 for cycle in cycles if cycle[1]])
     if len(cycles) < 3:
         return pfls, 0, 0
     type1, type2 = 0, 0
-    checked = set()
     for _ in range(samples):
         chosen = random.sample(cycles, 3)
-        if frozenset(chosen) in checked:
-            continue
-        checked.add(frozenset(chosen))
         if [entry[1] for entry in chosen] != [True] * 3:
             continue
-        chosen_cycles = [entry[0].value for entry in chosen]
+        chosen_cycles = [entry[0] for entry in chosen]
         if istype1(chosen_cycles):
             type1 += 1
         elif istype2(chosen_cycles):
