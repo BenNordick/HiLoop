@@ -1,5 +1,4 @@
 import argparse
-from collections import deque
 from identityholder import IdentityHolder
 from minimumtopologies import ispositive
 import networkx as nx
@@ -19,7 +18,7 @@ def istype2(cycle_sets):
         if connector.isdisjoint(other1) or connector.isdisjoint(other2):
             continue
         if other1.isdisjoint(other2):
-           return True
+            return True
     return False
 
 def summarize(graph, samples):
@@ -39,21 +38,6 @@ def summarize(graph, samples):
             type2 += 1
     return pfls, type1, type2
 
-def randomsubgraph(graph, max_nodes):
-    queue = deque(maxlen=len(graph.nodes))
-    selected = set()
-    queue.append(random.sample(graph.nodes, 1)[0])
-    while len(selected) < max_nodes and len(queue) > 0:
-        head = queue.popleft()
-        if head in selected:
-            continue
-        selected.add(head)
-        neighbors = list(graph.successors(head))
-        random.shuffle(neighbors)
-        for n in neighbors:
-            queue.append(n)
-    return graph.subgraph(selected)
-
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
     if max_nodes_for_sample is None:
@@ -62,26 +46,18 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
     else:
         base_results = [0, 0, 0]
         for _ in range(base_trials):
-            feasible_base_subgraph = randomsubgraph(graph, max_nodes_for_sample)
+            feasible_base_subgraph = permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
             for component, value in enumerate(summarize(feasible_base_subgraph, samples)):
                 base_results[component] += value
         for component in range(len(base_results)):
             base_results[component] /= base_trials
     print('Base results:', base_results)
     permutation_results = [[], [], []]
-    last_permutation = graph
-    checked_permutations = 0
-    while checked_permutations < permutations:
-        if checked_permutations % 20 == 0 and use_full_permutation:
-            last_permutation = permutenetwork.permutenetwork(graph)
-        else:
-            last_permutation = permutenetwork.permuteedgeswaps(permutenetwork.permuteregulations(last_permutation))
-        if base_connected and not nx.algorithms.is_strongly_connected(last_permutation):
-            continue
-        feasible_subgraph = last_permutation if max_nodes_for_sample is None else randomsubgraph(last_permutation, max_nodes_for_sample)
-        for component, value in enumerate(summarize(feasible_subgraph, samples)):
+    for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample):
+        for component, value in enumerate(summarize(permutation, samples)):
             permutation_results[component].append(value)
-        checked_permutations += 1
+        if checked_permutations == permutations:
+            break
     p_values = []
     for component, value in enumerate(base_results):
         extreme_counts = 0

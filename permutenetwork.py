@@ -1,3 +1,4 @@
+from collections import deque
 import networkx as nx
 import random
 
@@ -63,3 +64,32 @@ def permuteregulations(graph):
     for new_repression in random.sample(edges, repressions):
         copy.edges[new_repression]['repress'] = True
     return copy
+
+def randomsubgraph(graph, max_nodes):
+    queue = deque(maxlen=len(graph.nodes))
+    selected = set()
+    queue.append(random.sample(graph.nodes, 1)[0])
+    while len(selected) < max_nodes and len(queue) > 0:
+        head = queue.popleft()
+        if head in selected:
+            continue
+        selected.add(head)
+        neighbors = list(graph.successors(head))
+        random.shuffle(neighbors)
+        for n in neighbors:
+            queue.append(n)
+    return graph.subgraph(selected)
+
+def generatepermutations(graph, require_connected, use_full_permutation=True, max_nodes_for_sample=None):
+    last_permutation = graph
+    checked_permutations = 0
+    while True:
+        if checked_permutations % 20 == 0 and use_full_permutation:
+            last_permutation = permutenetwork(graph)
+        else:
+            last_permutation = permuteedgeswaps(permuteregulations(last_permutation))
+        if require_connected and not nx.algorithms.is_strongly_connected(last_permutation):
+            continue
+        feasible_subgraph = last_permutation if max_nodes_for_sample is None else randomsubgraph(last_permutation, max_nodes_for_sample)
+        checked_permutations += 1
+        yield checked_permutations, feasible_subgraph
