@@ -1,7 +1,8 @@
 from networkx.drawing.nx_agraph import to_agraph
 
-def rendergraph(graph, filename):
-    graph = graph.copy()
+def rendergraph(graph, filename, in_place=False):
+    if not in_place:
+        graph = graph.copy()
     for n in graph.nodes:
         graph.nodes[n]['label'] = graph.nodes[n]['name']
     for e in graph.edges:
