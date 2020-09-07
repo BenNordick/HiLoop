@@ -80,6 +80,22 @@ def randomsubgraph(graph, max_nodes):
             queue.append(n)
     return graph.subgraph(selected)
 
+def neighborhoodsubgraph(graph, start_node, depth):
+    current_ring = set([start_node])
+    next_ring = set()
+    selected = set(current_ring)
+    level = 0
+    while level < depth:
+        for n in current_ring:
+            for neighbor in graph.successors(n):
+                if neighbor not in selected:
+                    selected.add(neighbor)
+                    next_ring.add(neighbor)
+        current_ring = next_ring
+        next_ring = set()
+        level += 1
+    return graph.subgraph(selected)
+
 def generatepermutations(graph, require_connected, use_full_permutation=True, max_nodes_for_sample=None):
     last_permutation = graph
     checked_permutations = 0
