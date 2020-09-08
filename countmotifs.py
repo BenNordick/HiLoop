@@ -1,12 +1,14 @@
+import argparse
 from identityholder import IdentityHolder
+import liuwangcycles
 from minimumtopologies import ispositive
 import networkx as nx
 import rendergraph
 import sys
 
-def countmotifs(network):
+def countmotifs(network, max_cycle_length=None):
     print('Finding cycles')
-    cycle_sets = [IdentityHolder(frozenset(cycle), cycle) for cycle in nx.algorithms.simple_cycles(network) if ispositive(network, cycle)]
+    cycle_sets = [IdentityHolder(frozenset(cycle), cycle) for cycle in liuwangcycles.generatecycles(network, max_cycle_length) if ispositive(network, cycle)]
     cycle_edge_sets = dict()
     for holder in cycle_sets:
         cycle = holder.tag
@@ -35,7 +37,6 @@ def countmotifs(network):
         return False
     print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
     print('Searching for Type I motifs')
-    checked = 0
     type1 = 0
     for a, b, c in findtriangles(cycle_graph):
         shared_nodes = cycle_graph.edges[a, b]['shared'].intersection(cycle_graph.edges[b, c]['shared'])
@@ -45,7 +46,6 @@ def countmotifs(network):
             if coverextracycle(a, b, c) or coverextracycle(a, c, b) or coverextracycle(b, c, a):
                 continue # TODO: Avoid rejecting emergent cycles that are necessary to the motif
             type1 += 1
-        checked += 1
     print('Searching for Type II motifs')
     checked = 0
     type2 = 0
@@ -66,13 +66,21 @@ def countmotifs(network):
     return (len(cycle_sets), type1, type2)
 
 def findtriangles(graph):
+    checked = 0
     for a, b in graph.edges:
         for c in frozenset(graph[a]).intersection(frozenset(graph[b])):
             if c.isbefore(a) and c.isbefore(b):
                 yield (a, b, c)
+        checked += 1
+        if checked % 10 == 0:
+            print(f'{checked}\r', end='')
 
 if __name__ == "__main__":
-    graph = nx.convert_node_labels_to_integers(nx.read_graphml(sys.argv[1]))
-    result = countmotifs(graph)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('file', type=str, help='GraphML file to process')
+    parser.add_argument('--maxcycle', type=int, help='maximum cycle length')
+    args = parser.parse_args()
+    graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
+    result = countmotifs(graph, args.maxcycle)
     print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], sep='\t')
     
