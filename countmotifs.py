@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 from identityholder import IdentityHolder
 import liuwangcycles
 from minimumtopologies import ispositive
@@ -28,10 +29,20 @@ def countmotifs(network, max_cycle_length=None):
                 shared_edges = cycle_edge_sets[holder1].intersection(cycle_edge_sets[holder2])
                 if len(shared_edges) > 0:
                     cycle_edge_graph.add_edge(holder1, holder2, shared=shared_edges)
-    def coverextracycle(holder1, holder2, ignoring=None):
-        for common_neighbor in set(cycle_edge_graph[holder1]).intersection(set(cycle_edge_graph[holder2])):
+    def findinducedcycles(holders, ignoring=None):
+        common_neighbors = set(cycle_edge_graph[holders[0]])
+        for cn in range(1, len(holders)):
+            common_neighbors.intersection_update(set(cycle_edge_graph[holders[cn]]))
+        for common_neighbor in common_neighbors:
             if common_neighbor is ignoring:
                 continue
+            all_edges = cycle_edge_sets[holders[0]]
+            for cn in range(1, len(holders)):
+                all_edges = all_edges.union(cycle_edge_sets[holders[cn]])
+            if cycle_edge_sets[common_neighbor] < all_edges:
+                yield common_neighbor
+    def coverextracycle(holder1, holder2):
+        for common_neighbor in set(cycle_edge_graph[holder1]).intersection(set(cycle_edge_graph[holder2])):
             if cycle_edge_sets[common_neighbor] < cycle_edge_sets[holder1].union(cycle_edge_sets[holder2]):
                 return True
         return False
@@ -43,8 +54,28 @@ def countmotifs(network, max_cycle_length=None):
         if len(shared_nodes) == 0:
             continue
         if not shared_nodes.isdisjoint(cycle_graph.edges[a, c]['shared']):
-            if coverextracycle(a, b, c) or coverextracycle(a, c, b) or coverextracycle(b, c, a):
-                continue # TODO: Avoid rejecting emergent cycles that are necessary to the motif
+            extra_cycles = [*findinducedcycles([a, b], c), *findinducedcycles([a, c], b), *findinducedcycles([b, c], a), *findinducedcycles([a, b, c])]
+            if len(extra_cycles) > 0:
+                double_counting = False
+                for extra in extra_cycles:
+                    if extra.isbefore(c):
+                        double_counting = True
+                        break
+                if double_counting:
+                    continue
+                all_cycles = [a, b, c] + extra_cycles
+                all_edges = cycle_edge_sets[a].union(cycle_edge_sets[b]).union(cycle_edge_sets[c])
+                found_extra = False
+                for edge in all_edges:
+                    node_uses_after_elimination = Counter()
+                    for cycle in all_cycles:
+                        if edge not in cycle_edge_sets[cycle]:
+                            node_uses_after_elimination.update(cycle.value)
+                    if len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
+                        found_extra = True
+                        break
+                if found_extra:
+                    continue
             type1 += 1
     print('Searching for Type II motifs')
     checked = 0
@@ -69,7 +100,7 @@ def findtriangles(graph):
     checked = 0
     for a, b in graph.edges:
         for c in frozenset(graph[a]).intersection(frozenset(graph[b])):
-            if c.isbefore(a) and c.isbefore(b):
+            if a.isbefore(c) and b.isbefore(c):
                 yield (a, b, c)
         checked += 1
         if checked % 10 == 0:
