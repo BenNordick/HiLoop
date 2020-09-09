@@ -1,5 +1,6 @@
 import argparse
 from identityholder import IdentityHolder
+import liuwangcycles
 from minimumtopologies import ispositive
 import networkx as nx
 import permutenetwork
@@ -21,8 +22,8 @@ def istype2(cycle_sets):
             return True
     return False
 
-def summarize(graph, samples, max_motif_size=None):
-    cycles = [(frozenset(cycle), ispositive(graph, cycle)) for cycle in nx.algorithms.simple_cycles(graph)]
+def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
+    cycles = [(frozenset(cycle), ispositive(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
     pfls = len([0 for cycle in cycles if cycle[1]])
     if len(cycles) < 3:
         return pfls, 0, 0
@@ -42,23 +43,23 @@ def summarize(graph, samples, max_motif_size=None):
             type2 += 1
     return pfls, type1, type2
 
-def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None):
+def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
     if max_nodes_for_sample is None:
-        base_samples = summarize(graph, samples * base_trials, max_motif_size)
+        base_samples = summarize(graph, samples * base_trials, max_motif_size, max_cycle_length)
         base_results = (base_samples[0], base_samples[1] / base_trials, base_samples[2] / base_trials)
     else:
         base_results = [0, 0, 0]
         for _ in range(base_trials):
             feasible_base_subgraph = permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
-            for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size)):
+            for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size, max_cycle_length)):
                 base_results[component] += value
         for component in range(len(base_results)):
             base_results[component] /= base_trials
     print('Base results:', base_results)
     permutation_results = [[], [], []]
     for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample):
-        for component, value in enumerate(summarize(permutation, samples, max_motif_size)):
+        for component, value in enumerate(summarize(permutation, samples, max_motif_size, max_cycle_length)):
             permutation_results[component].append(value)
         if checked_permutations == permutations:
             break
@@ -79,10 +80,11 @@ if __name__ == "__main__":
     parser.add_argument('--maxnodes', type=int, help='maximum size of network to attempt cycle detection for')
     parser.add_argument('--basetrials', type=int, default=10, help='number of trials to average for the input network')
     parser.add_argument('--desonly', action='store_true', help='use only double-edge swaps for permutation')
+    parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
     parser.add_argument('--maxmotifsize', type=int, help='maximum number of nodes in a motif')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize)
+    p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle)
     print('PFLs:', p_values[0], sep='\t')
     print('Type 1:', p_values[1], sep='\t')
     print('Type 2:', p_values[2], sep='\t')
