@@ -7,7 +7,7 @@ import networkx as nx
 import rendergraph
 import sys
 
-def countmotifs(network, max_cycle_length=None):
+def countmotifs(network, max_cycle_length=None, max_motif_size=None):
     print('Finding cycles')
     cycle_sets = [IdentityHolder(frozenset(cycle), cycle) for cycle in liuwangcycles.generatecycles(network, max_cycle_length) if ispositive(network, cycle)]
     cycle_edge_sets = dict()
@@ -54,6 +54,10 @@ def countmotifs(network, max_cycle_length=None):
         if len(shared_nodes) == 0:
             continue
         if not shared_nodes.isdisjoint(cycle_graph.edges[a, c]['shared']):
+            if max_motif_size:
+                all_nodes = a.value.union(b.value).union(c.value)
+                if len(all_nodes) > max_motif_size:
+                    continue
             extra_cycles = [*findinducedcycles([a, b], c), *findinducedcycles([a, c], b), *findinducedcycles([b, c], a), *findinducedcycles([a, b, c])]
             if len(extra_cycles) > 0:
                 double_counting = False
@@ -87,6 +91,10 @@ def countmotifs(network, max_cycle_length=None):
                 continue
             for i2 in range(i1 + 1, len(neighbors)):
                 neigh2 = neighbors[i2]
+                if max_motif_size:
+                    all_nodes = holder.value.union(neigh1.value).union(neigh2.value)
+                    if len(all_nodes) > max_motif_size:
+                        continue
                 if cycle_graph.has_edge(neigh1, neigh2):
                     continue
                 if coverextracycle(holder, neigh2):
@@ -110,8 +118,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('file', type=str, help='GraphML file to process')
     parser.add_argument('--maxcycle', type=int, help='maximum cycle length')
+    parser.add_argument('--maxnodes', type=int, help='maximum number of nodes in a motif')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    result = countmotifs(graph, args.maxcycle)
+    result = countmotifs(graph, args.maxcycle, args.maxnodes)
     print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], sep='\t')
     
