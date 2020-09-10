@@ -7,15 +7,19 @@ import networkx as nx
 import rendergraph
 import sys
 
+launched_specifically = False
+
 def countmotifs(network, max_cycle_length=None, max_motif_size=None):
-    print('Finding cycles')
+    if launched_specifically:
+        print('Finding cycles')
     cycle_sets = [IdentityHolder(frozenset(cycle), cycle) for cycle in liuwangcycles.generatecycles(network, max_cycle_length) if ispositive(network, cycle)]
     cycle_edge_sets = dict()
     for holder in cycle_sets:
         cycle = holder.tag
         edge_set = frozenset((cycle[n], cycle[(n + 1) % len(cycle)]) for n in range(len(cycle)))
         cycle_edge_sets[holder] = edge_set
-    print('Creating cycle intersection graphs')
+    if launched_specifically:
+        print('Creating cycle intersection graphs')
     cycle_graph = nx.Graph()
     cycle_graph.add_nodes_from(cycle_sets)
     cycle_edge_graph = nx.Graph()
@@ -46,8 +50,9 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
             if cycle_edge_sets[common_neighbor] < cycle_edge_sets[holder1].union(cycle_edge_sets[holder2]):
                 return True
         return False
-    print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
-    print('Searching for Type I motifs')
+    if launched_specifically:
+        print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
+        print('Searching for Type I motifs')
     type1 = 0
     for a, b, c in findtriangles(cycle_graph):
         shared_nodes = cycle_graph.edges[a, b]['shared'].intersection(cycle_graph.edges[b, c]['shared'])
@@ -81,7 +86,8 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
                 if found_extra:
                     continue
             type1 += 1
-    print('Searching for Type II motifs')
+    if launched_specifically:
+        print('Searching for Type II motifs')
     checked = 0
     type2 = 0
     for holder in cycle_sets:
@@ -100,8 +106,9 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
                 if coverextracycle(holder, neigh2):
                     continue
                 type2 += 1
-        checked += 1
-        print(f'{checked}\r', end='')
+        if launched_specifically:
+            checked += 1
+            print(f'{checked}\r', end='')
     return (len(cycle_sets), type1, type2)
 
 def findtriangles(graph):
@@ -110,11 +117,13 @@ def findtriangles(graph):
         for c in frozenset(graph[a]).intersection(frozenset(graph[b])):
             if a.isbefore(c) and b.isbefore(c):
                 yield (a, b, c)
-        checked += 1
-        if checked % 10 == 0:
-            print(f'{checked}\r', end='')
+        if launched_specifically:
+            checked += 1
+            if checked % 10 == 0:
+                print(f'{checked}\r', end='')
 
 if __name__ == "__main__":
+    launched_specifically = True
     parser = argparse.ArgumentParser()
     parser.add_argument('file', type=str, help='GraphML file to process')
     parser.add_argument('--maxcycle', type=int, help='maximum cycle length')

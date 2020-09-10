@@ -10,3 +10,4 @@ out/
 share/
 site-packages/
 pyvenv.cfg
+_*.py
