@@ -1,3 +1,4 @@
+import networkx as nx
 from networkx.drawing.nx_agraph import to_agraph
 
 def rendergraph(graph, filename, in_place=False):
@@ -6,7 +7,7 @@ def rendergraph(graph, filename, in_place=False):
     for n in graph.nodes:
         graph.nodes[n]['label'] = graph.nodes[n]['name']
     for e in graph.edges:
-        edge = graph.edges[e[0], e[1]]
+        edge = graph.edges[e]
         if (edge['repress']):
             edge['arrowhead'] = 'tee'
     ag = to_agraph(graph)
@@ -23,6 +24,21 @@ def colorcycle(graph, cycle, color, mix_color):
                 edge['color'] = mix_color
         else:
             edge['color'] = color
+
+def colorcycles(graph, cycles):
+    multigraph = nx.MultiDiGraph(graph)
+    colored_edges = set()
+    for cycle, color in cycles:
+        for i in range(len(cycle)):
+            src = cycle[i]
+            dst = cycle[(i + 1) % len(cycle)]
+            if (src, dst) in colored_edges:
+                route = multigraph.add_edge(src, dst, **graph.edges[src, dst])
+                multigraph.edges[src, dst, route]['color'] = color
+            else:
+                multigraph.edges[src, dst, 0]['color'] = color
+                colored_edges.add((src, dst))
+    return multigraph
 
 def colorneighborhood(graph, start_node, colors, color_last_edges=True):
     current_ring = set([start_node])

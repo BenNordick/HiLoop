@@ -6,11 +6,7 @@ import random
 import rendergraph
 
 def colorsubgraph(graph, r, y, b):
-    colored = graph.copy()
-    rendergraph.colorcycle(colored, r, 'red', {})
-    rendergraph.colorcycle(colored, y, 'yellow', 'orange')
-    rendergraph.colorcycle(colored, b, 'blue', {'red': 'purple', 'yellow': 'green', 'orange': 'gray50'})
-    return colored 
+    return rendergraph.colorcycles(graph, [(r, 'red'), (y, 'gold'), (b, 'blue')]) 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='input GraphML file')
