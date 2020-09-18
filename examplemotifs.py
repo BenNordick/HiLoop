@@ -1,4 +1,5 @@
 import argparse
+import liuwangcycles
 from minimumtopologies import ispositive
 import networkx as nx
 import permutenetwork
@@ -16,6 +17,7 @@ parser.add_argument('--images', type=str, help='output file pattern {id, edges, 
 parser.add_argument('--printnodes', action='store_true', help='print distinct node names')
 parser.add_argument('--maxedges', type=int, help='maximum number of unique edges in examples')
 parser.add_argument('--maxnodes', type=int, help='maximum size of network to attempt cycle detection for')
+parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
 parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in common with an already drawn subnetwork')
 args = parser.parse_args()
 
@@ -33,13 +35,12 @@ def printnewnodes(nodes):
 
 while type1 < args.count1 or type2 < args.count2:
     feasible = graph if args.maxnodes is None else permutenetwork.randomsubgraph(graph, args.maxnodes)
-    cycles = [(cycle, ispositive(feasible, cycle)) for cycle in nx.algorithms.simple_cycles(feasible)]
+    cycles = [cycle for cycle in liuwangcycles.cyclesgenerator(feasible, args.maxcycle) if ispositive(feasible, cycle)]
     if len(cycles) < 3:
+        if not args.maxnodes:
+            break
         continue
-    chosen = random.sample(cycles, 3)
-    if [entry[1] for entry in chosen] != [True] * 3:
-        continue
-    chosen_cycles = [entry[0] for entry in chosen]
+    chosen_cycles = random.sample(cycles, 3)
     cycle_sets = [frozenset(cycle) for cycle in chosen_cycles]
     used_nodes = cycle_sets[0].union(cycle_sets[1]).union(cycle_sets[2])
     if args.maxsharing is not None:
