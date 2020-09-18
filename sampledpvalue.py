@@ -3,8 +3,11 @@ from identityholder import IdentityHolder
 import liuwangcycles
 from minimumtopologies import ispositive
 import networkx as nx
+import numpy as np
 import permutenetwork
 import random
+from scipy.special import comb
+import scipy.stats
 
 def istype1(cycle_sets):
     intersection = cycle_sets[0]
@@ -21,6 +24,11 @@ def istype2(cycle_sets):
         if other1.isdisjoint(other2):
             return True
     return False
+
+def estimatecount(type1_samples, type2_samples, sample_attempts, cycle_count, pfl_count):
+    type1 = type1_samples * comb(cycle_count, 3) / sample_attempts
+    type2 = type2_samples * comb(cycle_count, 3) / sample_attempts
+    return type1, type2
 
 def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     cycles = [(frozenset(cycle), ispositive(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
@@ -41,21 +49,18 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
             type1 += 1
         elif istype2(chosen_cycles):
             type2 += 1
-    return pfls, type1, type2
+    type1_est, type2_est = estimatecount(type1, type2, samples, len(cycles), pfls)
+    return pfls, type1_est, type2_est
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
-    if max_nodes_for_sample is None:
-        base_samples = summarize(graph, samples * base_trials, max_motif_size, max_cycle_length)
-        base_results = (base_samples[0], base_samples[1] / base_trials, base_samples[2] / base_trials)
-    else:
-        base_results = [0, 0, 0]
-        for _ in range(base_trials):
-            feasible_base_subgraph = permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
-            for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size, max_cycle_length)):
-                base_results[component] += value
-        for component in range(len(base_results)):
-            base_results[component] /= base_trials
+    base_results = [0, 0, 0]
+    for _ in range(base_trials):
+        feasible_base_subgraph = graph if max_nodes_for_sample is None else permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
+        for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size, max_cycle_length)):
+            base_results[component] += value
+    for component in range(len(base_results)):
+        base_results[component] /= base_trials
     print('Base results:', base_results)
     permutation_results = [[], [], []]
     for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample):
@@ -63,14 +68,17 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
             permutation_results[component].append(value)
         if checked_permutations == permutations:
             break
+    empirical_cdfs = []
     p_values = []
     for component, value in enumerate(base_results):
         extreme_counts = 0
         for permutation_value in permutation_results[component]:
             if permutation_value >= value:
                 extreme_counts += 1
-        p_values.append(extreme_counts / permutations)
-    return p_values
+        empirical_cdfs.append(extreme_counts / permutations)
+        t, p = scipy.stats.ttest_1samp(permutation_results[component], value)
+        p_values.append(p)
+    return empirical_cdfs, p_values
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -84,7 +92,8 @@ if __name__ == "__main__":
     parser.add_argument('--maxmotifsize', type=int, help='maximum number of nodes in a motif')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle)
-    print('PFLs:', p_values[0], sep='\t')
-    print('Type 1:', p_values[1], sep='\t')
-    print('Type 2:', p_values[2], sep='\t')
+    empirical_cdfs, p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle)
+    column_names = ['PFLs', 'Type 1', 'Type 2']
+    print('\tFracLE\tp')
+    for i, column in enumerate(column_names):
+        print(column, empirical_cdfs[i], p_values[i], sep='\t')
