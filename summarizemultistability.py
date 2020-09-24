@@ -17,7 +17,7 @@ def summarizeattractors(pset_report):
             monotonic_species += 1
     return n_attractors, monotonic_species
 
-def plotmultistability(report):
+def plotmultistability(report, label_counts=False):
     summary_occurrences = collections.defaultdict(int)
     for pset in report['psets']:
         summary_occurrences[summarizeattractors(pset)] += 1
@@ -41,14 +41,20 @@ def plotmultistability(report):
     ax.set_yticklabels([str(n) for n in y_range])
     ax.set_xlabel('Attractors')
     ax.set_ylabel('Monotonically correlated species')
+    if label_counts:
+        for y in range(height):
+            for x in range(width):
+                if heatmap_pixels[y][x] > 0:
+                    ax.text(x, y, str(heatmap_pixels[y][x]), ha='center', va='center', color='gray')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('report', type=str, help='input JSON report filename')
     parser.add_argument('graph', type=str, help='output graph image filename')
+    parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
-    plotmultistability(report)
+    plotmultistability(report, label_counts=args.counts)
     plt.savefig(args.graph)
     plt.close()
