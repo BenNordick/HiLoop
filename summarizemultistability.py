@@ -1,6 +1,7 @@
 import argparse
 import collections
 import json
+import matplotlib.colors as mplcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -24,7 +25,7 @@ def summarizeattractors(pset_report):
         most_monotonic_species = max(most_monotonic_species, monotonic_species)
     return len(attractors), most_monotonic_species
 
-def plotmultistability(report, label_counts=False):
+def plotmultistability(report, label_counts=False, colorbar=True):
     '''Sets up a multistability heatmap in the current pyplot.'''
     summary_occurrences = collections.defaultdict(int)
     for pset in report['psets']:
@@ -41,8 +42,9 @@ def plotmultistability(report, label_counts=False):
     for summary, occurrences in summary_occurrences.items():
         heatmap_pixels[max_monotonic - summary[1]][summary[0] - min_attractors] = occurrences
     fig, ax = plt.subplots()
-    im = ax.imshow(heatmap_pixels)
-    fig.colorbar(im)
+    im = ax.imshow(heatmap_pixels, norm=mplcolors.LogNorm(vmax=heatmap_pixels.max()))
+    if colorbar:
+        fig.colorbar(im)
     ax.set_xticks(range(width))
     ax.set_yticks(range(height))
     ax.set_xticklabels([str(n) for n in x_range])
@@ -60,9 +62,10 @@ if __name__ == "__main__":
     parser.add_argument('report', type=str, help='input JSON report filename')
     parser.add_argument('graph', type=str, help='output graph image filename')
     parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
+    parser.add_argument('--colorbar', action='store_true', help='show colorbar even when counts are displayed')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
-    plotmultistability(report, label_counts=args.counts)
+    plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     plt.savefig(args.graph)
     plt.close()
