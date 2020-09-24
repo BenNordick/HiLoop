@@ -6,18 +6,26 @@ import numpy as np
 
 def summarizeattractors(pset_report):
     '''Get a 2-tuple summarizing a set of attractors: attractor count, monotonic species count.'''
-    sorted_attractors = sorted(pset_report['attractors'], key=lambda a: a[0])
-    n_attractors = len(sorted_attractors)
-    species = len(sorted_attractors[0])
-    # TODO: find the largest set of monotonically correlated attractors
-    monotonic_species = 1
-    for i in range(1, species):
-        attractor_concs = [a[i] for a in sorted_attractors]
-        if attractor_concs == sorted(attractor_concs) or attractor_concs == sorted(attractor_concs, reverse=True):
-            monotonic_species += 1
-    return n_attractors, monotonic_species
+    attractors = pset_report['attractors']
+    species = len(attractors[0])
+    correlated_species = set()
+    most_monotonic_species = 0
+    for i in range(species):
+        if i in correlated_species:
+            continue
+        sorted_attractors = sorted(attractors, key=lambda a: a[i])
+        correlated_species.add(i)
+        monotonic_species = 1
+        for j in set(range(species)).difference(correlated_species):
+            attractor_concs = [a[j] for a in sorted_attractors]
+            if attractor_concs == sorted(attractor_concs) or attractor_concs == sorted(attractor_concs, reverse=True):
+                monotonic_species += 1
+                correlated_species.add(j)
+        most_monotonic_species = max(most_monotonic_species, monotonic_species)
+    return len(attractors), most_monotonic_species
 
 def plotmultistability(report, label_counts=False):
+    '''Sets up a multistability heatmap in the current pyplot.'''
     summary_occurrences = collections.defaultdict(int)
     for pset in report['psets']:
         summary_occurrences[summarizeattractors(pset)] += 1
