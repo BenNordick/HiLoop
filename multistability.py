@@ -6,7 +6,7 @@ import numpy as np
 import tellurium as te
 
 # Adapted from a script written by Tian Hong 9/21/2020
-def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, print_results=False):
+def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=50, dt=5, print_results=False):
 
     # Define initial conditions for simulations
     # A uniform grid is used. When number of genes is large, consider using Latin Hypercube Sampling
@@ -30,7 +30,7 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, print_
         for ii, ini_comb in enumerate(ini_combs):
             for iv, v in enumerate(runner.fs()):
                 runner[v] = ini_comb[iv] # Set initial condition
-            runner.simulate(start=0, end=50, points=10) # For a quick simulation. May need to confirm the accuracy when multiple attractors are obtained
+            runner.simulate(start=0, end=time, points=round(time / dt))
             ss = runner.sv() # Get the steady state solution. Note: the variable names (unsorted) are r.fs()
             if sols is None:
                 sols = ss
@@ -78,12 +78,14 @@ if __name__ == "__main__":
     parser.add_argument('output', type=str, help='output JSON file path')
     parser.add_argument('--psets', type=int, default=1000, help='number of parameter sets to try')
     parser.add_argument('--attractors', type=int, default=2, help='minimum number of attractors to report multistability')
+    parser.add_argument('--time', type=int, default=50, help='length of simulation')
+    parser.add_argument('--dt', type=float, default=5.0, help='time step length for runner.simulate')
     args = parser.parse_args()
     if args.input.endswith('.sb'):
         with open(args.input) as f:
             r = te.loada(f.read())
     else:
         r = networkmodel(nx.read_graphml(args.input))
-    result = findmultistability(r, n_psets=args.psets, min_attractors=args.attractors, print_results=True)
+    result = findmultistability(r, n_psets=args.psets, min_attractors=args.attractors, time=args.time, dt=args.dt, print_results=True)
     with open(args.output, 'w') as f:
         f.write(json.dumps(result))
