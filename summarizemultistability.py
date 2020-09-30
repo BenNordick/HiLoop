@@ -4,6 +4,7 @@ import json
 import matplotlib.colors as mplcolors
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn import decomposition
 
 def summarizeattractors(pset_report):
     '''Get a 2-tuple summarizing a set of attractors: attractor count, monotonic species count.'''
@@ -25,11 +26,16 @@ def summarizeattractors(pset_report):
         most_monotonic_species = max(most_monotonic_species, monotonic_species)
     return len(attractors), most_monotonic_species
 
-def plotmultistability(report, label_counts=False, colorbar=True):
-    '''Sets up a multistability heatmap in the current pyplot.'''
-    summary_occurrences = collections.defaultdict(int)
+def categorizeattractors(report):
+    '''Get a dictionary of attractor summary tuples to lists of their occurrences.'''
+    summary_occurrences = collections.defaultdict(list)
     for pset in report['psets']:
-        summary_occurrences[summarizeattractors(pset)] += 1
+        summary_occurrences[summarizeattractors(pset)].append(pset)
+    return summary_occurrences
+
+def plotmultistability(report, label_counts=False, colorbar=True):
+    '''Set up a multistability heatmap in the current pyplot.'''
+    summary_occurrences = categorizeattractors(report)
     max_attractors = max(s[0] for s in summary_occurrences.keys())
     min_attractors = min(s[0] for s in summary_occurrences.keys())
     max_monotonic = len(report['species_names'])
@@ -40,7 +46,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
     y_range = reversed(range(min_monotonic, max_monotonic + 1))
     heatmap_pixels = np.zeros((height, width), dtype=int)
     for summary, occurrences in summary_occurrences.items():
-        heatmap_pixels[max_monotonic - summary[1]][summary[0] - min_attractors] = occurrences
+        heatmap_pixels[max_monotonic - summary[1]][summary[0] - min_attractors] = len(occurrences)
     fig, ax = plt.subplots()
     im = ax.imshow(heatmap_pixels, norm=mplcolors.LogNorm(vmax=heatmap_pixels.max()))
     if colorbar:
@@ -57,15 +63,69 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                 if heatmap_pixels[y][x] > 0:
                     ax.text(x, y, str(heatmap_pixels[y][x]), ha='center', va='center', color='gray')
 
+def plotattractors(report, reduction, connect_psets=False, filter_attractors=None, filter_correlated_species=None):
+    reduction.prepare(report)
+    summary_occurrences = categorizeattractors(report)
+    filtered_psets = []
+    for summary, occurrences in summary_occurrences.items():
+        attractors, monotonic = summary
+        if filter_attractors is not None and attractors != filter_attractors:
+            continue
+        if filter_correlated_species is not None and monotonic != filter_correlated_species:
+            continue
+        filtered_psets.extend(occurrences)
+    if connect_psets:
+        for pset in filtered_psets:
+            pset_matrix = np.array(pset['attractors'])
+            pset_xy = reduction.reduce(pset_matrix)
+            sorted_attractors = pset_xy[pset_xy[:, 0].argsort()]
+            plt.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], 'o-')
+    else:
+        points = reduction.reduce(psets_matrix(filtered_psets))
+        plt.hexbin(points[:, 0], points[:, 1], norm=mplcolors.LogNorm())
+    xlabel, ylabel = reduction.labels()
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+
+def psets_matrix(psets):
+    full_matrix = None
+    for pset in psets:
+        if full_matrix is None:
+            full_matrix = np.array(pset['attractors'])
+        else:
+            full_matrix = np.vstack((full_matrix, np.array(pset['attractors'])))
+    return full_matrix
+
+class PCA2D():
+    def __init__(self):
+        self.pca = decomposition.PCA(n_components=2)
+    def prepare(self, report):
+        self.pca.fit(psets_matrix(report['psets']))
+    def reduce(self, matrix):
+        return self.pca.transform(matrix)
+    def labels(self):
+        return 'PCA1', 'PCA2'
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('report', type=str, help='input JSON report filename')
     parser.add_argument('graph', type=str, help='output graph image filename')
-    parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
-    parser.add_argument('--colorbar', action='store_true', help='show colorbar even when counts are displayed')
+    subcmds = parser.add_subparsers(dest='command', required=True, help='kind of graph to make')
+    heatmap_parser = subcmds.add_parser('heatmap')
+    heatmap_parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
+    heatmap_parser.add_argument('--colorbar', action='store_true', help='show colorbar even when counts are displayed')
+    scatterplot_parser = subcmds.add_parser('scatterplot')
+    scatterplot_parser.add_argument('--attractors', type=int, help='filter parameter sets by number of attractors')
+    scatterplot_parser.add_argument('--correlated', type=int, help='filter parameter sets by number of monotonically correlated species')
+    scatterplot_parser.add_argument('--connect', action='store_true', help='connect attractors from the same parameter set')
+    scatterplot_parser.add_argument('--reduction', type=str, default='auto', help='species for dimensions: X1,X2;Y1,Y2 or "pca" to run PCA')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
-    plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
+    if args.command == 'heatmap':
+        plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
+    elif args.command == 'scatterplot':
+        # TODO: Other reduction methods
+        plotattractors(report, PCA2D(), connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated)
     plt.savefig(args.graph)
     plt.close()
