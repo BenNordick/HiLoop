@@ -106,6 +106,44 @@ class PCA2D():
     def labels(self):
         return 'PCA1', 'PCA2'
 
+class AverageLog():
+    def __init__(self, settings=None):
+        self.settings = settings
+    def prepare(self, report):
+        self.names = report['species_names']
+        if self.settings is None:
+            raise NotImplementedError('You must specify genes for reduction axes') # TODO
+        else:
+            x, y = self.settings.split('/')
+            self.x_components = [self._parsecomponent(report, c.strip()) for c in x.split(',')]
+            self.y_components = [self._parsecomponent(report, c.strip()) for c in y.split(',')]
+    def reduce(self, matrix):
+        return np.stack((self._componentwisereduce(matrix, self.x_components), self._componentwisereduce(matrix, self.y_components)), 1)
+    def labels(self):
+        return ', '.join((self._componentname(c) for c in self.x_components)), ', '.join((self._componentname(c) for c in self.y_components))
+    def _parsecomponent(self, report, text):
+        if text.startswith('-'):
+            text = text[1:]
+            factor = -1
+        else:
+            factor = 1
+        index = self.names.index(text) if text in self.names else self.names.index(f'X_{text}')
+        return index, factor
+    def _componentwisereduce(self, matrix, components):
+        results = None
+        for index, factor in components:
+            component_log = np.log(matrix[:, index]) * factor
+            if results is None:
+                results = component_log
+            else:
+                results += component_log
+        return np.exp(results / len(components))
+    def _componentname(self, component):
+        index, factor = component
+        prefix = '-' if factor < 0 else ''
+        name = self.names[index]
+        return prefix + (name[2:] if name.startswith('X_') else name)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('report', type=str, help='input JSON report filename')
@@ -118,14 +156,14 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--attractors', type=int, help='filter parameter sets by number of attractors')
     scatterplot_parser.add_argument('--correlated', type=int, help='filter parameter sets by number of monotonically correlated species')
     scatterplot_parser.add_argument('--connect', action='store_true', help='connect attractors from the same parameter set')
-    scatterplot_parser.add_argument('--reduction', type=str, default='auto', help='species for dimensions: X1,X2;Y1,Y2 or "pca" to run PCA')
+    scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
     if args.command == 'heatmap':
         plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
-        # TODO: Other reduction methods
-        plotattractors(report, PCA2D(), connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated)
+        reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
+        plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated)
     plt.savefig(args.graph)
     plt.close()
