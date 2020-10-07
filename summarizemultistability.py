@@ -1,5 +1,6 @@
 import argparse
 import collections
+import copy
 import json
 import matplotlib.colors as mplcolors
 import matplotlib.pyplot as plt
@@ -82,7 +83,9 @@ def plotattractors(report, reduction, connect_psets=False, filter_attractors=Non
             plt.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], 'o-')
     else:
         points = reduction.reduce(psets_matrix(filtered_psets))
-        plt.hexbin(points[:, 0], points[:, 1], norm=mplcolors.LogNorm())
+        cmap = copy.copy(plt.get_cmap('viridis'))
+        cmap.set_under('white', 1.0)
+        plt.hexbin(points[:, 0], points[:, 1], linewidths=0.2, norm=mplcolors.LogNorm(vmin=2), cmap=cmap)
     xlabel, ylabel = reduction.labels()
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -104,7 +107,7 @@ class PCA2D():
     def reduce(self, matrix):
         return self.pca.transform(matrix)
     def labels(self):
-        return 'PCA1', 'PCA2'
+        return 'PC1', 'PC2'
 
 class AverageLog():
     def __init__(self, settings=None):
@@ -112,7 +115,7 @@ class AverageLog():
     def prepare(self, report):
         self.names = report['species_names']
         if self.settings is None:
-            raise NotImplementedError('You must specify genes for reduction axes') # TODO
+            raise NotImplementedError('You must specify genes for reduction axes')
         else:
             x, y = self.settings.split('/')
             self.x_components = [self._parsecomponent(report, c.strip()) for c in x.split(',')]
@@ -165,5 +168,5 @@ if __name__ == "__main__":
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated)
-    plt.savefig(args.graph)
+    plt.savefig(args.graph, dpi=150)
     plt.close()
