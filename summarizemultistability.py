@@ -66,17 +66,21 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                 if heatmap_pixels[y][x] > 0:
                     ax.text(x, y, str(heatmap_pixels[y][x]), ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets='none', filter_attractors=None, filter_correlated_species=None):
+def plotattractors(report, reduction, connect_psets='none', filter_attractors=None, filter_correlated_species=None, downsample=None):
     reduction.prepare(report)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
+    random.seed(1)
     for summary, occurrences in summary_occurrences.items():
         attractors, monotonic = summary
         if filter_attractors is not None and attractors != filter_attractors:
             continue
         if filter_correlated_species is not None and monotonic != filter_correlated_species:
             continue
-        filtered_psets.extend(occurrences)
+        if downsample is not None and attractors in downsample:
+            filtered_psets.extend(o for o in occurrences if random.uniform(0, 1) < downsample[attractors])
+        else:
+            filtered_psets.extend(occurrences)
     xlabel, ylabel = reduction.labels()
     if connect_psets == 'line':
         for pset in filtered_psets:
@@ -184,6 +188,7 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--correlated', type=int, help='filter parameter sets by number of monotonically correlated species')
     scatterplot_parser.add_argument('--connect', choices=['none', 'line', 'arc'], default='none', help='how to connect attractors from the same parameter set')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
+    scatterplot_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
@@ -191,6 +196,7 @@ if __name__ == "__main__":
         plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
-        plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated)
+        downsample = {int(n): float(p) for n, p in [part.split(':') for part in args.downsample.split(',')]} if args.downsample else None
+        plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=downsample)
     plt.savefig(args.graph, dpi=150)
     plt.close()
