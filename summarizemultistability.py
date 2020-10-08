@@ -3,8 +3,10 @@ import collections
 import copy
 import json
 import matplotlib.colors as mplcolors
+import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 from sklearn import decomposition
 
 def summarizeattractors(pset_report):
@@ -64,7 +66,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                 if heatmap_pixels[y][x] > 0:
                     ax.text(x, y, str(heatmap_pixels[y][x]), ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, filter_attractors=None, filter_correlated_species=None):
+def plotattractors(report, reduction, connect_psets='none', filter_attractors=None, filter_correlated_species=None):
     reduction.prepare(report)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -75,7 +77,8 @@ def plotattractors(report, reduction, connect_psets=False, filter_attractors=Non
         if filter_correlated_species is not None and monotonic != filter_correlated_species:
             continue
         filtered_psets.extend(occurrences)
-    if connect_psets:
+    xlabel, ylabel = reduction.labels()
+    if connect_psets == 'line':
         for pset in filtered_psets:
             pset_matrix = np.array(pset['attractors'])
             pset_xy = reduction.reduce(pset_matrix)
@@ -85,10 +88,31 @@ def plotattractors(report, reduction, connect_psets=False, filter_attractors=Non
         points = reduction.reduce(psets_matrix(filtered_psets))
         cmap = copy.copy(plt.get_cmap('viridis'))
         cmap.set_under('white', 1.0)
-        plt.hexbin(points[:, 0], points[:, 1], linewidths=0.2, norm=mplcolors.LogNorm(vmin=2), cmap=cmap)
-    xlabel, ylabel = reduction.labels()
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+        hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap}
+        if connect_psets == 'arc':
+            fig = plt.figure()
+            grid = fig.add_gridspec(nrows=1, ncols=2, width_ratios=(6, 1), wspace=0.05)
+            ax_main = fig.add_subplot(grid[0, 0])
+            ax_main.set_xlabel(xlabel)
+            ax_main.set_ylabel(ylabel)
+            ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
+            ax_arcs = fig.add_subplot(grid[0, 1], sharey=ax_main)
+            ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
+            color_cycle = ax_arcs._get_lines.prop_cycler
+            for pset in filtered_psets:
+                pset_matrix = np.array(pset['attractors'])
+                pset_xy = reduction.reduce(pset_matrix)
+                sorted_ys = sorted(pset_xy[:, 1])
+                height = random.uniform(0.2, 1.8)
+                color = next(color_cycle)['color']
+                for i in range(len(sorted_ys) - 1):
+                    a, b = sorted_ys[i:(i + 2)]
+                    ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.5))
+        else:
+            plt.hexbin(points[:, 0], points[:, 1], **hex_args)
+    if connect_psets != 'arc':
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
 
 def psets_matrix(psets):
     full_matrix = None
@@ -158,7 +182,7 @@ if __name__ == "__main__":
     scatterplot_parser = subcmds.add_parser('scatterplot')
     scatterplot_parser.add_argument('--attractors', type=int, help='filter parameter sets by number of attractors')
     scatterplot_parser.add_argument('--correlated', type=int, help='filter parameter sets by number of monotonically correlated species')
-    scatterplot_parser.add_argument('--connect', action='store_true', help='connect attractors from the same parameter set')
+    scatterplot_parser.add_argument('--connect', choices=['none', 'line', 'arc'], default='none', help='how to connect attractors from the same parameter set')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
     args = parser.parse_args()
     with open(args.report) as f:
