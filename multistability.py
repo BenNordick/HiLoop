@@ -3,6 +3,7 @@ from itertools import product
 import json
 import networkx as nx
 import numpy as np
+import re
 import scipy.signal as ssig
 import tellurium as te
 
@@ -20,7 +21,7 @@ def coalesce_adjacent(points):
 
 def describe_attractor(result, dt, print_results):
     recent = result[-round(10 / dt):, 1:]
-    if np.linalg.norm(np.max(recent, axis=0) - np.min(recent, axis=0)) <= 1e-4:
+    if np.linalg.norm(np.max(recent, axis=0) - np.min(recent, axis=0)) <= (4e-5) * recent.shape[1]:
         # Steady state
         return result[-1][1:]
     else:
@@ -34,20 +35,24 @@ def describe_attractor(result, dt, print_results):
                     print('Warning: late-starting oscillation')
                 return None
             species_info = []
+            actual_oscillation = False
             for species in result.colnames[1:]:
                 series = result[species][(result.shape[0] >> 1):]
                 series_min = np.min(series)
                 series_max = np.max(series)
                 if series_max - series_min < 0.01:
-                    return None
+                    species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': {}})
+                    continue
                 ft = np.abs(np.fft.rfft(series))
-                peaks, props = ssig.find_peaks(ft, prominence=0.25, wlen=round(5 / dt))
-                if 0 < len(peaks) < 15:
+                peaks, props = ssig.find_peaks(ft, prominence=0.25, wlen=max(round(5 / dt), 5))
+                if len(peaks) < 14:
                     peak_dict = dict(zip(peaks, props['prominences']))
                     species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict})
+                    if len(peaks) > 0:
+                        actual_oscillation = True
                 else:
                     return None
-            return species_info
+            return species_info if actual_oscillation else None
         else:
             if print_results:
                 print('Warning: unstable endpoint without oscillation')
@@ -61,7 +66,7 @@ def equivalent_attractors(a, b):
         for i in range(len(a)):
             if np.linalg.norm([a[i]['min'] - b[i]['min'], a[i]['max'] - b[i]['max']]) > 1e-1:
                 return False
-            unmatched_peaks = {k for k, v in b[i]['ftpeaks'].items() if v > 0.75}
+            unmatched_peaks = {k for k, v in b[i]['ftpeaks'].items() if v > 1.5}
             for peak_pos, peak_prom in a[i]['ftpeaks'].items():
                 match = False
                 for offset in range(-1, 2):
@@ -70,9 +75,9 @@ def equivalent_attractors(a, b):
                         if cand_pos in unmatched_peaks:
                             unmatched_peaks.remove(cand_pos)
                         cand_prom = b[i]['ftpeaks'][cand_pos]
-                        match = abs(cand_prom - peak_prom) < 1.5 or abs((cand_prom - peak_prom) / max(cand_prom, peak_prom)) < 0.1
+                        match = abs(cand_prom - peak_prom) < 3 or abs((cand_prom - peak_prom) / max(cand_prom, peak_prom)) < 0.1
                         break
-                if (not match) and peak_prom > 0.75:
+                if (not match) and peak_prom > 1.5:
                     return False
             if len(unmatched_peaks) > 0:
                 return False
@@ -92,7 +97,7 @@ def serialize_attractor(info):
     return info_list
 
 # Adapted from a script written by Tian Hong 9/21/2020
-def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=50, dt=5, print_results=False):
+def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=50, dt=5, fix_params=None, print_results=False):
 
     # Define initial conditions for simulations
     # A uniform grid is used. When number of genes is large, consider using Latin Hypercube Sampling
@@ -113,6 +118,9 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=5
             runner[p] = dom[0] + rands[i, ip] * (dom[1] - dom[0]) # Set parameter value
             if p[0] == 'n':
                 runner[p] = np.round(runner[p], decimals=0) # n is usually an integer
+        if fix_params:
+            for k, v in fix_params.items():
+                runner[k] = v
         sols = []
         for ii, ini_comb in enumerate(ini_combs):
             for iv, v in enumerate(runner.fs()):
@@ -160,12 +168,23 @@ if __name__ == "__main__":
     parser.add_argument('--attractors', type=int, default=2, help='minimum number of attractors to report multistability')
     parser.add_argument('--time', type=int, default=50, help='length of simulation')
     parser.add_argument('--dt', type=float, default=5.0, help='time step length for runner.simulate')
+    parser.add_argument('--concs', type=int, default=5, help='number of concentrations to test for each gene')
+    parser.add_argument('--fix', type=str, help='file to get fixed parameters from')
+    parser.add_argument('--fixfilter', type=str, help='regex to filter fixed parameter names by')
     args = parser.parse_args()
     if args.input.endswith('.sb'):
         with open(args.input) as f:
             r = te.loada(f.read())
     else:
         r = networkmodel(nx.read_graphml(args.input))
-    result = findmultistability(r, n_psets=args.psets, min_attractors=args.attractors, time=args.time, dt=args.dt, print_results=True)
+    fixed_params = None
+    if args.fix:
+        fixed_params = {}
+        with open(args.fix) as f:
+            for line in f:
+                item, value = re.split(r"\s+", line, maxsplit=1)
+                if (args.fixfilter is None) or re.match(args.fixfilter, item):
+                    fixed_params[item] = float(value.rstrip())
+    result = findmultistability(r, n_pts1d=args.concs, n_psets=args.psets, min_attractors=args.attractors, time=args.time, dt=args.dt, fix_params=fixed_params, print_results=True)
     with open(args.output, 'w') as f:
         f.write(json.dumps(result))
