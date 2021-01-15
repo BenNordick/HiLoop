@@ -34,12 +34,23 @@ def describe_attractor(result, dt, print_results):
                 if print_results:
                     print('Warning: late-starting oscillation')
                 return None
+            last_quarter = result[-round(result.shape[0] / 4):, 1:]
+            lq_range = np.max(last_quarter, axis=0) - np.min(last_quarter, axis=0)
+            midpoint = round(result.shape[0] / 2)
+            last_half = result[midpoint:, 1:]
+            lh_range = np.max(last_half, axis=0) - np.min(last_half, axis=0)
+            if np.any(lh_range - lq_range > 0.01):
+                if print_results:
+                    print('Warning: interrupted dampening')
+                return None
             species_info = []
             actual_oscillation = False
             for species in result.colnames[1:]:
-                series = result[species][(result.shape[0] >> 1):]
-                series_min = np.min(series)
-                series_max = np.max(series)
+                series = result[species][midpoint:]
+                series_argmin = np.argmin(series)
+                series_min = series[series_argmin]
+                series_argmax = np.argmax(series)
+                series_max = series[series_argmax]
                 if series_max - series_min < 0.01:
                     species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': {}})
                     continue
@@ -47,7 +58,9 @@ def describe_attractor(result, dt, print_results):
                 peaks, props = ssig.find_peaks(ft, prominence=0.25, wlen=max(round(5 / dt), 5))
                 if len(peaks) < 14:
                     peak_dict = dict(zip(peaks, props['prominences']))
-                    species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict})
+                    all_at_min = last_half[series_argmin, :]
+                    all_at_max = last_half[series_argmax, :]
+                    species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict, 'at_min': all_at_min, 'at_max': all_at_max})
                     if len(peaks) > 0:
                         actual_oscillation = True
                 else:
@@ -93,6 +106,9 @@ def serialize_attractor(info):
             ftpeaks = list(species['ftpeaks'].items())
             species['peaks'] = [int(fp[0]) for fp in ftpeaks]
             species['prominences'] = [float(fp[1]) for fp in ftpeaks]
+            if 'at_min' in species:
+                species['at_min'] = [float(x) for x in species['at_min']]
+                species['at_max'] = [float(x) for x in species['at_max']]
             del species['ftpeaks']
     return info_list
 
@@ -108,7 +124,7 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=5
     points = round(time / dt) + 1
 
     # Ranges of parameter values to sample
-    doms = {'K': (0.05, 4.5), 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6]}
+    doms = {'K': [0.05, 4.5], 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6]}
     rands = np.random.uniform(size=(n_psets, len(runner.ps()))) # Random numbers for perturbing parameters
 
     results = {'species_names': runner.fs(), 'parameter_names': runner.ps(), 'psets': [], 'ftpoints': points >> 1}
