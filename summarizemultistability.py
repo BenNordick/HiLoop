@@ -8,6 +8,7 @@ import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import scipy.spatial as sspace
 import seaborn as sns
 from sklearn import decomposition
 
@@ -17,6 +18,14 @@ def caricaturespecies(attractor_species):
         return (attractor_species['max'] + attractor_species['min']) / 2
     else:
         return attractor_species
+
+def caricatureattractors(attractors):
+    '''Caricature each species in the given attractor set (nested list).'''
+    return [[caricaturespecies(s) for s in a] for a in attractors]
+
+def isoscillator(attractor):
+    '''Determines whether the given attractor list is an oscillatory attractor.'''
+    return isinstance(attractor[0], dict)
 
 def summarizeattractors(pset_report):
     '''Get a 2-tuple summarizing a set of attractors: attractor count, monotonic species count.'''
@@ -99,12 +108,31 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
         else:
             filtered_psets.extend(occurrences)
     xlabel, ylabel = reduction.labels()
+    ax_main = None
     if connect_psets == 'line':
+        fig, ax_main = plt.subplots()
         for pset in filtered_psets:
-            pset_matrix = np.array(pset['attractors'])
+            pset_matrix = np.array(caricatureattractors(pset['attractors']))
             pset_xy = reduction.reduce(pset_matrix)
             sorted_attractors = pset_xy[pset_xy[:, 0].argsort()]
-            plt.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], 'o-')
+            line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1])
+            pset_color = line[0].get_color()
+            point_mask = [not isoscillator(a) for a in pset['attractors']]
+            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], color=pset_color)
+            for osc in (a for a in pset['attractors'] if isoscillator(a)):
+                vertices = None
+                for species in (s for s in osc if ('at_min' in s)):
+                    spec_vertices = np.array([species['at_min'], species['at_max']])
+                    if vertices is None:
+                        vertices = spec_vertices
+                    else:
+                        vertices = np.vstack((vertices, spec_vertices))
+                projected_vertices = reduction.reduce(vertices)
+                if projected_vertices.shape[0] >= 3:
+                    hull = sspace.ConvexHull(projected_vertices, qhull_options='QJ')
+                    projected_vertices = projected_vertices[hull.vertices, :]
+                polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=1.5, linestyle='--', fill=False)
+                ax_main.add_patch(polygon)
     else:
         points = reduction.reduce(psets_matrix(filtered_psets))
         cmap = copy.copy(plt.get_cmap('viridis'))
@@ -114,8 +142,6 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
             fig = plt.figure()
             grid = fig.add_gridspec(nrows=1, ncols=2, width_ratios=(6, 1), wspace=0.05)
             ax_main = fig.add_subplot(grid[0, 0])
-            ax_main.set_xlabel(xlabel)
-            ax_main.set_ylabel(ylabel)
             ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
             ax_arcs = fig.add_subplot(grid[0, 1], sharey=ax_main)
             ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
@@ -130,19 +156,19 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
                     a, b = sorted_ys[i:(i + 2)]
                     ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.5))
         else:
-            plt.hexbin(points[:, 0], points[:, 1], **hex_args)
-    if connect_psets != 'arc':
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
+            ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
+    ax_main.set_xlabel(xlabel)
+    ax_main.set_ylabel(ylabel)
 
 def psets_matrix(psets, range_tag=False):
     full_matrix = None
     free_index = 0
     for pset in psets:
+        numeric_attractors = caricatureattractors(np.array(pset['attractors']))
         if full_matrix is None:
-            full_matrix = np.array(pset['attractors'])
+            full_matrix = numeric_attractors
         else:
-            full_matrix = np.vstack((full_matrix, np.array(pset['attractors'])))
+            full_matrix = np.vstack((full_matrix, numeric_attractors))
         if range_tag:
             pset['range'] = range(free_index, free_index + len(pset['attractors']))
             free_index += len(pset['attractors'])
