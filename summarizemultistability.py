@@ -11,6 +11,13 @@ import random
 import seaborn as sns
 from sklearn import decomposition
 
+def caricaturespecies(attractor_species):
+    '''Turn the given species information value (which might be an oscillation) into a single point, for comparison.'''
+    if isinstance(attractor_species, dict):
+        return (attractor_species['max'] + attractor_species['min']) / 2
+    else:
+        return attractor_species
+
 def summarizeattractors(pset_report):
     '''Get a 2-tuple summarizing a set of attractors: attractor count, monotonic species count.'''
     attractors = pset_report['attractors']
@@ -20,12 +27,12 @@ def summarizeattractors(pset_report):
     for i in range(species):
         if i in correlated_species:
             continue
-        sorted_attractors = sorted(attractors, key=lambda a: a[i])
+        sorted_attractors = sorted(attractors, key=lambda a: caricaturespecies(a[i]))
         correlated_species.add(i)
         monotonic_species = 1
         for j in set(range(species)).difference(correlated_species):
             attractor_concs = [a[j] for a in sorted_attractors]
-            if attractor_concs == sorted(attractor_concs) or attractor_concs == sorted(attractor_concs, reverse=True):
+            if attractor_concs == sorted(attractor_concs, key=caricaturespecies) or attractor_concs == sorted(attractor_concs, key=caricaturespecies, reverse=True):
                 monotonic_species += 1
                 correlated_species.add(j)
         most_monotonic_species = max(most_monotonic_species, monotonic_species)
@@ -51,8 +58,12 @@ def plotmultistability(report, label_counts=False, colorbar=True):
     height = max_monotonic - min_monotonic + 1
     y_range = reversed(range(min_monotonic, max_monotonic + 1))
     heatmap_pixels = np.zeros((height, width), dtype=int)
+    oscillators = np.zeros((height, width), dtype=int)
     for summary, occurrences in summary_occurrences.items():
-        heatmap_pixels[max_monotonic - summary[1]][summary[0] - min_attractors] = len(occurrences)
+        x = summary[0] - min_attractors
+        y = max_monotonic - summary[1]
+        heatmap_pixels[y][x] = len(occurrences)
+        oscillators[y][x] = sum(1 for oc in occurrences if any(isinstance(at[0], dict) for at in oc['attractors']))
     fig, ax = plt.subplots()
     im = ax.imshow(heatmap_pixels, norm=mplcolors.LogNorm(vmax=heatmap_pixels.max()))
     if colorbar:
@@ -67,7 +78,10 @@ def plotmultistability(report, label_counts=False, colorbar=True):
         for y in range(height):
             for x in range(width):
                 if heatmap_pixels[y][x] > 0:
-                    ax.text(x, y, str(heatmap_pixels[y][x]), ha='center', va='center', color='gray')
+                    text = str(heatmap_pixels[y][x])
+                    if oscillators[y][x] > 0:
+                        text = f'{text}\n({oscillators[y][x]} osc.)'
+                    ax.text(x, y, text, ha='center', va='center', color='gray')
 
 def plotattractors(report, reduction, connect_psets='none', filter_attractors=None, filter_correlated_species=None, downsample=None):
     reduction.prepare(report)
