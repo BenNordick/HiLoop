@@ -8,40 +8,39 @@ import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-import scipy.spatial as sspace
 import seaborn as sns
 from sklearn import decomposition
 
-def caricaturespecies(attractor_species):
-    '''Turn the given species information value (which might be an oscillation) into a single point, for comparison.'''
-    if isinstance(attractor_species, dict):
-        return (attractor_species['max'] + attractor_species['min']) / 2
+def isoscillator(attractor):
+    '''Determines whether the given attractor value is an oscillatory attractor.'''
+    return isinstance(attractor, dict)
+
+def caricatureattractor(attractor):
+    '''Turn the given attractor information value (which might be an oscillation) into a single vector, for comparison.'''
+    if isoscillator(attractor):
+        return [(s['max'] + s['min']) / 2 for s in attractor['species']]
     else:
-        return attractor_species
+        return attractor
 
 def caricatureattractors(attractors):
     '''Caricature each species in the given attractor set (nested list).'''
-    return [[caricaturespecies(s) for s in a] for a in attractors]
-
-def isoscillator(attractor):
-    '''Determines whether the given attractor list is an oscillatory attractor.'''
-    return isinstance(attractor[0], dict)
+    return [caricatureattractor(a) for a in attractors]
 
 def summarizeattractors(pset_report):
     '''Get a 2-tuple summarizing a set of attractors: attractor count, monotonic species count.'''
-    attractors = pset_report['attractors']
+    attractors = caricatureattractors(pset_report['attractors'])
     species = len(attractors[0])
     correlated_species = set()
     most_monotonic_species = 0
     for i in range(species):
         if i in correlated_species:
             continue
-        sorted_attractors = sorted(attractors, key=lambda a: caricaturespecies(a[i]))
+        sorted_attractors = sorted(attractors, key=lambda a: a[i])
         correlated_species.add(i)
         monotonic_species = 1
         for j in set(range(species)).difference(correlated_species):
             attractor_concs = [a[j] for a in sorted_attractors]
-            if attractor_concs == sorted(attractor_concs, key=caricaturespecies) or attractor_concs == sorted(attractor_concs, key=caricaturespecies, reverse=True):
+            if attractor_concs == sorted(attractor_concs) or attractor_concs == sorted(attractor_concs, reverse=True):
                 monotonic_species += 1
                 correlated_species.add(j)
         most_monotonic_species = max(most_monotonic_species, monotonic_species)
@@ -72,7 +71,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
         x = summary[0] - min_attractors
         y = max_monotonic - summary[1]
         heatmap_pixels[y][x] = len(occurrences)
-        oscillators[y][x] = sum(1 for oc in occurrences if any(isinstance(at[0], dict) for at in oc['attractors']))
+        oscillators[y][x] = sum(1 for oc in occurrences if any(isoscillator(at) for at in oc['attractors']))
     fig, ax = plt.subplots()
     im = ax.imshow(heatmap_pixels, norm=mplcolors.LogNorm(vmax=heatmap_pixels.max()))
     if colorbar:
@@ -120,17 +119,10 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
             point_mask = [not isoscillator(a) for a in pset['attractors']]
             ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], color=pset_color)
             for osc in (a for a in pset['attractors'] if isoscillator(a)):
-                vertices = None
-                for species in (s for s in osc if ('at_min' in s)):
-                    spec_vertices = np.array([species['at_min'], species['at_max']])
-                    if vertices is None:
-                        vertices = spec_vertices
-                    else:
-                        vertices = np.vstack((vertices, spec_vertices))
+                vertices = np.array(osc['orbit'])
                 projected_vertices = reduction.reduce(vertices)
                 if projected_vertices.shape[0] >= 3:
-                    hull = sspace.ConvexHull(projected_vertices, qhull_options='QJ')
-                    projected_vertices = projected_vertices[hull.vertices, :]
+                    projected_vertices = np.vstack((projected_vertices, projected_vertices[0, :]))
                 polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=1.5, linestyle='--', fill=False)
                 ax_main.add_patch(polygon)
     else:
@@ -164,7 +156,7 @@ def psets_matrix(psets, range_tag=False):
     full_matrix = None
     free_index = 0
     for pset in psets:
-        numeric_attractors = caricatureattractors(np.array(pset['attractors']))
+        numeric_attractors = np.array(caricatureattractors(pset['attractors']))
         if full_matrix is None:
             full_matrix = numeric_attractors
         else:

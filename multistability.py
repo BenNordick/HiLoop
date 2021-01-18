@@ -47,10 +47,8 @@ def describe_attractor(result, dt, print_results):
             actual_oscillation = False
             for species in result.colnames[1:]:
                 series = result[species][midpoint:]
-                series_argmin = np.argmin(series)
-                series_min = series[series_argmin]
-                series_argmax = np.argmax(series)
-                series_max = series[series_argmax]
+                series_min = np.min(series)
+                series_max = np.max(series)
                 if series_max - series_min < 0.01:
                     species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': {}})
                     continue
@@ -58,36 +56,44 @@ def describe_attractor(result, dt, print_results):
                 peaks, props = ssig.find_peaks(ft, prominence=0.25, wlen=max(round(5 / dt), 5))
                 if len(peaks) < 14:
                     peak_dict = dict(zip(peaks, props['prominences']))
-                    all_at_min = last_half[series_argmin, :]
-                    all_at_max = last_half[series_argmax, :]
-                    species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict, 'at_min': all_at_min, 'at_max': all_at_max})
+                    species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict})
                     if len(peaks) > 0:
                         actual_oscillation = True
                 else:
                     return None
-            return species_info if actual_oscillation else None
+            if actual_oscillation:
+                norms_to_next = np.linalg.norm(result[1:, 1:] - result[:-1, 1:], axis=1)
+                orbit_end = result.shape[0] - 2
+                left_start = False
+                while norms_to_next[orbit_end - 1] < norms1[orbit_end] or not left_start:
+                    if norms1[orbit_end] > 0.05:
+                        left_start = True
+                    orbit_end = orbit_end - 1
+                return {'species': species_info, 'orbit': result[orbit_end:, 1:]}
+            else:
+                return None
         else:
             if print_results:
                 print('Warning: unstable endpoint without oscillation')
             return None
 
 def equivalent_attractors(a, b):
-    if isinstance(a[0], dict) != isinstance(b[0], dict):
+    if isinstance(a, dict) != isinstance(b, dict):
         return False
-    if isinstance(a[0], dict):
+    if isinstance(a, dict):
         # Oscillatory attractor
-        for i in range(len(a)):
-            if np.linalg.norm([a[i]['min'] - b[i]['min'], a[i]['max'] - b[i]['max']]) > 1e-1:
+        for i in range(len(a['species'])):
+            if np.linalg.norm([a['species'][i]['min'] - b['species'][i]['min'], a['species'][i]['max'] - b['species'][i]['max']]) > 1e-1:
                 return False
-            unmatched_peaks = {k for k, v in b[i]['ftpeaks'].items() if v > 1.5}
-            for peak_pos, peak_prom in a[i]['ftpeaks'].items():
+            unmatched_peaks = {k for k, v in b['species'][i]['ftpeaks'].items() if v > 1.5}
+            for peak_pos, peak_prom in a['species'][i]['ftpeaks'].items():
                 match = False
                 for offset in range(-1, 2):
                     cand_pos = peak_pos + offset
-                    if cand_pos in b[i]['ftpeaks']:
+                    if cand_pos in b['species'][i]['ftpeaks']:
                         if cand_pos in unmatched_peaks:
                             unmatched_peaks.remove(cand_pos)
-                        cand_prom = b[i]['ftpeaks'][cand_pos]
+                        cand_prom = b['species'][i]['ftpeaks'][cand_pos]
                         match = abs(cand_prom - peak_prom) < 3 or abs((cand_prom - peak_prom) / max(cand_prom, peak_prom)) < 0.1
                         break
                 if (not match) and peak_prom > 1.5:
@@ -100,17 +106,16 @@ def equivalent_attractors(a, b):
         return np.linalg.norm(a - b) < 5e-1
 
 def serialize_attractor(info):
-    info_list = list(info)
-    for species in info_list:
-        if isinstance(species, dict):
+    if isinstance(info, dict):
+        for species in info['species']:
             ftpeaks = list(species['ftpeaks'].items())
             species['peaks'] = [int(fp[0]) for fp in ftpeaks]
             species['prominences'] = [float(fp[1]) for fp in ftpeaks]
-            if 'at_min' in species:
-                species['at_min'] = [float(x) for x in species['at_min']]
-                species['at_max'] = [float(x) for x in species['at_max']]
             del species['ftpeaks']
-    return info_list
+        info['orbit'] = [[float(x) for x in r] for r in info['orbit']]
+        return info
+    else:
+        return list(info)
 
 # Adapted from a script written by Tian Hong 9/21/2020
 def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=50, dt=5, fix_params=None, print_results=False):
@@ -147,7 +152,7 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=5
                 sols.append(attractor)
         if len(sols) >= min_attractors: # Multiple attractors with a single parameter set
             if print_results:
-                print(sols, f'(pset {i})')
+                print([(s['species'] if isinstance(s, dict) else s) for s in sols], f'(pset {i})')
             result = {'parameters': [runner[p] for p in runner.ps()], 'attractors': [serialize_attractor(a) for a in sols]}
             results['psets'].append(result)
     return results
