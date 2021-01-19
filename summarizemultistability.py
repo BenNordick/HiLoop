@@ -232,11 +232,11 @@ def plotheatmap(report, arcs=False, downsample=None):
     else:
         dendrogram_ratio = 0.2
     cg = sns.clustermap(matrix, col_cluster=False, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, 0), xticklabels=gene_names, yticklabels=False, cmap='seismic')
+    matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
     if arcs:
         new_gs = plt.GridSpec(1, 2 + len(filtered_pset_types), figure=cg.fig, width_ratios=([3, 10] + [2] * len(filtered_pset_types)))
         cg.ax_heatmap.set_position(new_gs[1].get_position(cg.fig))
         cg.ax_col_dendrogram.set_position(new_gs[0].get_position(cg.fig))
-        matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
         for fpt_id, summary in enumerate(sorted(filtered_pset_types.keys(), key=lambda am: am[0] * 100 + am[1], reverse=True)):
             ax_arcs = cg.fig.add_subplot(new_gs[2 + fpt_id], sharey=cg.ax_heatmap)
             ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
@@ -251,6 +251,14 @@ def plotheatmap(report, arcs=False, downsample=None):
             ax_arcs.set_xlabel(f'{summary[0]} att.,\n{summary[1]} m.s.')
             for spine in ['top', 'right', 'bottom']:
                 ax_arcs.spines[spine].set_visible(False)
+    mesh = cg.ax_heatmap.collections[0]
+    for pset in filtered_psets:
+        for index, attr in zip(pset['range'], pset['attractors']):
+            if isoscillator(attr):
+                display_y = matrix_display_ind[index]
+                for x, species in enumerate(attr['species']):
+                    color_stops = [species['min'], (species['min'] + species['max']) / 2, species['max']]
+                    cg.ax_heatmap.pcolormesh([x, x + 0.5, x + 1], [display_y, display_y + 1], [color_stops] * 2, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
 
 def parse_downsample(arg):
     return {int(n): float(p) for n, p in [part.split(':') for part in arg.split(',')]} if arg else None
