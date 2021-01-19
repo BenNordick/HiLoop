@@ -256,9 +256,11 @@ def plotheatmap(report, arcs=False, downsample=None):
         for index, attr in zip(pset['range'], pset['attractors']):
             if isoscillator(attr):
                 display_y = matrix_display_ind[index]
-                for x, species in enumerate(attr['species']):
-                    color_stops = [species['min'], (species['min'] + species['max']) / 2, species['max']]
-                    cg.ax_heatmap.pcolormesh([x, x + 0.5, x + 1], [display_y, display_y + 1], [color_stops] * 2, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
+                orbit = np.array(attr['orbit'])
+                for x in range(orbit.shape[1]):
+                    x_stops = np.linspace(x, x + 1, orbit.shape[0])
+                    color_stops = np.vstack((orbit[:, x], orbit[:, x]))
+                    cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
 
 def parse_downsample(arg):
     return {int(n): float(p) for n, p in [part.split(':') for part in arg.split(',')]} if arg else None
