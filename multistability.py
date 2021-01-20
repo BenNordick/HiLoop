@@ -27,7 +27,8 @@ def describe_attractor(result, dt, print_results):
     else:
         norms1 = np.linalg.norm(result[:, 1:] - result[-1][1:], axis=1)
         norms2 = np.linalg.norm(result[:, 1:] - result[-4][1:], axis=1)
-        matching_points = coalesce_adjacent(np.flatnonzero((norms1 < 0.03 * dt) | (norms2 < 0.03 * dt)))
+        norm_cutoff = 0.03 * dt * recent.shape[1]
+        matching_points = coalesce_adjacent(np.flatnonzero((norms1 < norm_cutoff) | (norms2 < norm_cutoff)))
         if len(matching_points) > 5:
             # Oscillation
             if matching_points[0] > result.shape[0] / 2:
@@ -54,13 +55,10 @@ def describe_attractor(result, dt, print_results):
                     continue
                 ft = np.abs(np.fft.rfft(series))
                 peaks, props = ssig.find_peaks(ft, prominence=0.25, wlen=max(round(5 / dt), 5))
-                if len(peaks) < 14:
-                    peak_dict = dict(zip(peaks, props['prominences']))
-                    species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict})
-                    if len(peaks) > 0:
-                        actual_oscillation = True
-                else:
-                    return None
+                peak_dict = dict(zip(peaks, props['prominences']))
+                species_info.append({'min': series_min, 'max': series_max, 'ftpeaks': peak_dict})
+                if len(peaks) > 0:
+                    actual_oscillation = True
             if actual_oscillation:
                 norms_to_next = np.linalg.norm(result[1:, 1:] - result[:-1, 1:], axis=1)
                 orbit_end = result.shape[0] - 2
@@ -118,7 +116,7 @@ def serialize_attractor(info):
         return list(info)
 
 # Adapted from a script written by Tian Hong 9/21/2020
-def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=50, dt=5, fix_params=None, print_results=False):
+def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_oscillators=None, time=50, dt=5, fix_params=None, ignore_ptypes='g', print_results=False):
 
     # Define initial conditions for simulations
     # A uniform grid is used. When number of genes is large, consider using Latin Hypercube Sampling
@@ -129,16 +127,20 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=5
     points = round(time / dt) + 1
 
     # Ranges of parameter values to sample
-    doms = {'K': [0.05, 4.5], 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6]}
+    doms = {'K': [0.05, 4.5], 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6], 'g': [-1, 1]}
     rands = np.random.uniform(size=(n_psets, len(runner.ps()))) # Random numbers for perturbing parameters
 
-    results = {'species_names': runner.fs(), 'parameter_names': runner.ps(), 'psets': [], 'ftpoints': points >> 1}
+    results = {'species_names': runner.fs(), 'parameter_names': runner.ps(), 'psets': [], 'ftpoints': points >> 1, 'tested_psets': n_psets}
     for i in range(n_psets):
         for ip, p in enumerate(runner.ps()):
+            if p[0] in ignore_ptypes:
+                continue
             dom = doms[p[0]]
             runner[p] = dom[0] + rands[i, ip] * (dom[1] - dom[0]) # Set parameter value
             if p[0] == 'n':
                 runner[p] = np.round(runner[p], decimals=0) # n is usually an integer
+            elif p[0] == 'g':
+                runner[p] = 10.0 ** runner[p] # Uniform log distribution
         if fix_params:
             for k, v in fix_params.items():
                 runner[k] = v
@@ -150,7 +152,8 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, time=5
             attractor = describe_attractor(sim_points, dt, print_results)
             if attractor is not None and all(not equivalent_attractors(attractor, e) for e in sols):
                 sols.append(attractor)
-        if len(sols) >= min_attractors: # Multiple attractors with a single parameter set
+        n_oscillatory_sols = sum(1 for a in sols if isinstance(a, dict))
+        if len(sols) >= min_attractors or (min_oscillators is not None and n_oscillatory_sols >= min_oscillators):
             if print_results:
                 print([(s['species'] if isinstance(s, dict) else s) for s in sols], f'(pset {i})')
             result = {'parameters': [runner[p] for p in runner.ps()], 'attractors': [serialize_attractor(a) for a in sols]}
@@ -163,7 +166,7 @@ def networksb(network):
         return network.nodes[node]['name'].replace('-', '').replace('.', '')
     parts = []
     for i, node in enumerate(network.nodes):
-        parts.append(f'J{i}: -> X_{safenodename(node)}; k_{safenodename(node)} * ((1 - r_{safenodename(node)}) + r_{safenodename(node)}')
+        parts.append(f'J{i}: -> X_{safenodename(node)}; g_{safenodename(node)} * (k_{safenodename(node)} * ((1 - r_{safenodename(node)}) + r_{safenodename(node)}')
         for regulator in network.predecessors(node):
             interaction_id = f'{safenodename(node)}_{safenodename(regulator)}'
             exp_term = f'(X_{safenodename(regulator)} / K_{interaction_id})^n_{interaction_id}'
@@ -171,7 +174,8 @@ def networksb(network):
                 parts.append(f' * 1 / (1 + {exp_term})')
             else:
                 parts.append(f' * {exp_term} / (1 + {exp_term})')
-        parts.append(f') - X_{safenodename(node)}\nX_{safenodename(node)} = 0.1\nk_{safenodename(node)} = 3.0\nr_{safenodename(node)} = 0.99\n')
+        parts.append(f') - X_{safenodename(node)})\n')
+        parts.append(f'X_{safenodename(node)} = 0.1\nk_{safenodename(node)} = 3.0\nr_{safenodename(node)} = 0.99\ng_{safenodename(node)} = 1.0\n')
     for regulator, target in network.edges:
         interaction_id = f'{safenodename(target)}_{safenodename(regulator)}'
         parts.append(f'\nK_{interaction_id} = 1.0; n_{interaction_id} = 4;')
@@ -187,11 +191,14 @@ if __name__ == "__main__":
     parser.add_argument('output', type=str, help='output JSON file path')
     parser.add_argument('--psets', type=int, default=1000, help='number of parameter sets to try')
     parser.add_argument('--attractors', type=int, default=2, help='minimum number of attractors to report multistability')
+    parser.add_argument('--oscillators', type=int, help='minimum number of oscillatory attractors to report')
     parser.add_argument('--time', type=int, default=50, help='length of simulation')
     parser.add_argument('--dt', type=float, default=5.0, help='time step length for runner.simulate')
     parser.add_argument('--concs', type=int, default=5, help='number of concentrations to test for each gene')
     parser.add_argument('--fix', type=str, help='file to get fixed parameters from')
     parser.add_argument('--fixfilter', type=str, help='regex to filter fixed parameter names by')
+    parser.add_argument('--ignoretypes', type=str, default='g', help='parameter type letters to keep at defaults')
+    parser.add_argument('--quiet', '-q', action='store_true', help='do not print results')
     args = parser.parse_args()
     if args.input.endswith('.sb'):
         with open(args.input) as f:
@@ -206,6 +213,7 @@ if __name__ == "__main__":
                 item, value = re.split(r"\s+", line, maxsplit=1)
                 if (args.fixfilter is None) or re.match(args.fixfilter, item):
                     fixed_params[item] = float(value.rstrip())
-    result = findmultistability(r, n_pts1d=args.concs, n_psets=args.psets, min_attractors=args.attractors, time=args.time, dt=args.dt, fix_params=fixed_params, print_results=True)
+    result = findmultistability(r, n_pts1d=args.concs, n_psets=args.psets, min_attractors=args.attractors, min_oscillators=args.oscillators, time=args.time, dt=args.dt, 
+        fix_params=fixed_params, ignore_ptypes=args.ignoretypes, print_results=(not args.quiet))
     with open(args.output, 'w') as f:
         f.write(json.dumps(result))
