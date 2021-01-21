@@ -40,7 +40,7 @@ def describe_attractor(result, dt, print_results):
             midpoint = round(result.shape[0] / 2)
             last_half = result[midpoint:, 1:]
             lh_range = np.max(last_half, axis=0) - np.min(last_half, axis=0)
-            if np.any(lh_range - lq_range > 0.02):
+            if np.any((lh_range - lq_range > 0.02) | (lh_range / lq_range > 1.5)):
                 if print_results:
                     print('Warning: interrupted dampening')
                 return None
