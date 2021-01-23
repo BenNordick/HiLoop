@@ -214,7 +214,7 @@ class AverageLog():
         name = self.names[index]
         return prefix + (name[2:] if name.startswith('X_') else name)
 
-def plotheatmap(report, arcs=False, downsample=None):
+def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -258,8 +258,8 @@ def plotheatmap(report, arcs=False, downsample=None):
                 display_y = matrix_display_ind[index]
                 orbit = np.array(attr['orbit'])
                 for x in range(orbit.shape[1]):
-                    x_stops = np.linspace(x, x + 1, orbit.shape[0])
-                    color_stops = np.vstack((orbit[:, x], orbit[:, x]))
+                    x_stops = np.linspace(x, x + 1, orbit.shape[0] * osc_orbits)
+                    color_stops = np.tile(np.vstack((orbit[:, x], orbit[:, x])), osc_orbits)
                     cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
 
 def parse_downsample(arg):
@@ -282,6 +282,7 @@ if __name__ == "__main__":
     heatmap_parser = subcmds.add_parser('heatmap')
     heatmap_parser.add_argument('--arc', action='store_true', help='join multiattractor types with arcs')
     heatmap_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
+    heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
@@ -291,6 +292,6 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample))
     elif args.command == 'heatmap':
-        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample))
+        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits)
     plt.savefig(args.graph, dpi=150)
     plt.close()
