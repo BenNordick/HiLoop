@@ -148,6 +148,7 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
                     a, b = sorted_ys[i:(i + 2)]
                     ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.5))
         else:
+            fig, ax_main = plt.subplots()
             ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
     ax_main.set_xlabel(xlabel)
     ax_main.set_ylabel(ylabel)
