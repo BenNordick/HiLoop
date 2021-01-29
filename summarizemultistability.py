@@ -152,18 +152,14 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
     ax_main.set_xlabel(xlabel)
     ax_main.set_ylabel(ylabel)
 
-def psets_matrix(psets, range_tag=False):
+def psets_matrix(psets):
     full_matrix = None
-    free_index = 0
     for pset in psets:
         numeric_attractors = np.array(caricatureattractors(pset['attractors']))
         if full_matrix is None:
             full_matrix = numeric_attractors
         else:
             full_matrix = np.vstack((full_matrix, numeric_attractors))
-        if range_tag:
-            pset['range'] = range(free_index, free_index + len(pset['attractors']))
-            free_index += len(pset['attractors'])
     return full_matrix
 
 class PCA2D():
@@ -214,7 +210,7 @@ class AverageLog():
         name = self.names[index]
         return prefix + (name[2:] if name.startswith('X_') else name)
 
-def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1):
+def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=None):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -225,35 +221,79 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1):
             filtered_psets.extend(o for o in occurrences if random.uniform(0, 1) < downsample[attractors])
         else:
             filtered_psets.extend(occurrences)
-    matrix = psets_matrix(filtered_psets, range_tag=True)
     if arcs:
         filtered_pset_types = categorizeattractors(filtered_psets)
-        dendrogram_ratio = 3 / (10 + 2 * len(filtered_pset_types))
+        dendrogram_ratio = 3 / (13 + 2 * len(filtered_pset_types))
     else:
         dendrogram_ratio = 0.2
+    matrix = None
+    unique_fingerprints = None
+    row_redundancies = None
+    for pset in filtered_psets:
+        pset['indexes'] = []
+        for attractor in pset['attractors']:
+            caricature = np.array(caricatureattractor(attractor))
+            if fold_dist is not None:
+                if isoscillator(attractor):
+                    fingerprint = [100]
+                    for species in attractor['species']:
+                        fingerprint.append(species['min'])
+                        fingerprint.append(species['max'])
+                else:
+                    fingerprint = [0]
+                    for conc in attractor:
+                        fingerprint.extend([conc, conc])
+                fingerprint = np.array(fingerprint)
+            if matrix is None:
+                matrix = np.vstack((caricature, ))
+                if fold_dist is not None:
+                    unique_fingerprints = np.vstack((fingerprint, ))
+                    row_redundancies = [1]
+                pset['indexes'].append(0)
+            elif fold_dist is None:
+                pset['indexes'].append(matrix.shape[0])
+                matrix = np.vstack((matrix, caricature))
+            else:
+                existing_indexes, = np.where(np.linalg.norm(unique_fingerprints - fingerprint, axis=1) < fold_dist * 2)
+                if len(existing_indexes) > 0:
+                    pset['indexes'].append(existing_indexes[0])
+                    row_redundancies[existing_indexes[0]] += 1
+                else:
+                    pset['indexes'].append(matrix.shape[0])
+                    matrix = np.vstack((matrix, caricature))
+                    unique_fingerprints = np.vstack((unique_fingerprints, fingerprint))
+                    row_redundancies.append(1)
     cg = sns.clustermap(matrix, col_cluster=False, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, 0), xticklabels=gene_names, yticklabels=False, cmap='seismic')
     matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
+    heatmap_index = 1 if fold_dist is None else 2
+    width_ratios = [2, 8]
     if arcs:
-        new_gs = plt.GridSpec(1, 2 + len(filtered_pset_types), figure=cg.fig, width_ratios=([3, 10] + [2] * len(filtered_pset_types)))
-        cg.ax_heatmap.set_position(new_gs[1].get_position(cg.fig))
-        cg.ax_col_dendrogram.set_position(new_gs[0].get_position(cg.fig))
+        width_ratios = [3, 10] + [2] * len(filtered_pset_types)
+    if fold_dist is not None:
+        width_ratios.insert(1, width_ratios[1] * len(gene_names) * 0.01)
+        width_ratios[2] -= width_ratios[1]
+    new_gs = plt.GridSpec(1, len(width_ratios), figure=cg.fig, width_ratios=width_ratios)
+    cg.ax_heatmap.set_position(new_gs[heatmap_index].get_position(cg.fig))
+    cg.ax_col_dendrogram.set_position(new_gs[0].get_position(cg.fig))
+    if arcs:
         for fpt_id, summary in enumerate(sorted(filtered_pset_types.keys(), key=lambda am: am[0] * 100 + am[1], reverse=True)):
-            ax_arcs = cg.fig.add_subplot(new_gs[2 + fpt_id], sharey=cg.ax_heatmap)
+            ax_arcs = cg.fig.add_subplot(new_gs[heatmap_index + 1 + fpt_id], sharey=cg.ax_heatmap)
             ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
             color_cycle = ax_arcs._get_lines.prop_cycler
             for pset_id, pset in enumerate(filtered_pset_types[summary]):
                 color = next(color_cycle)['color']
                 height = 1.75 - 0.2 * (pset_id % 8) + random.uniform(0, 0.1)
-                rows = sorted(matrix_display_ind[i] for i in pset['range'])
+                rows = sorted(matrix_display_ind[i] for i in pset['indexes'])
                 for i in range(len(rows) - 1):
                     a, b = rows[i:(i + 2)]
-                    ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2 + 0.5), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.7))
+                    if a != b:
+                        ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2 + 0.5), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.7))
             ax_arcs.set_xlabel(f'{summary[0]} att.,\n{summary[1]} m.s.')
             for spine in ['top', 'right', 'bottom']:
                 ax_arcs.spines[spine].set_visible(False)
     mesh = cg.ax_heatmap.collections[0]
     for pset in filtered_psets:
-        for index, attr in zip(pset['range'], pset['attractors']):
+        for index, attr in zip(pset['indexes'], pset['attractors']):
             if isoscillator(attr):
                 display_y = matrix_display_ind[index]
                 orbit = np.array(attr['orbit'])
@@ -261,6 +301,16 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1):
                     x_stops = np.linspace(x, x + 1, orbit.shape[0] * osc_orbits)
                     color_stops = np.tile(np.vstack((orbit[:, x], orbit[:, x])), osc_orbits)
                     cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
+    if fold_dist is not None:
+        ax_redundancy = cg.fig.add_subplot(new_gs[1], sharey=cg.ax_heatmap)
+        y_stops = np.arange(0, matrix.shape[0] + 1)
+        reordered_redundancies = np.zeros((matrix.shape[0], 1))
+        for i, redundancy in enumerate(row_redundancies):
+            reordered_redundancies[matrix_display_ind[i], 0] = redundancy
+        ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
+        ax_redundancy.tick_params(labelbottom=False, labelleft=False, bottom=False)
+        for spine in ['top', 'left', 'bottom']:
+            ax_redundancy.spines[spine].set_visible(False)
 
 def parse_downsample(arg):
     return {int(n): float(p) for n, p in [part.split(':') for part in arg.split(',')]} if arg else None
@@ -283,6 +333,7 @@ if __name__ == "__main__":
     heatmap_parser.add_argument('--arc', action='store_true', help='join multiattractor types with arcs')
     heatmap_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
     heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
+    heatmap_parser.add_argument('--fold', type=float, help='distance under which attractors will be combined into one heatmap row')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
@@ -292,6 +343,6 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample))
     elif args.command == 'heatmap':
-        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits)
+        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits, fold_dist=args.fold)
     plt.savefig(args.graph, dpi=150)
     plt.close()
