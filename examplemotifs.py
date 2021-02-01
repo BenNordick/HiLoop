@@ -19,6 +19,7 @@ parser.add_argument('--maxedges', type=int, help='maximum number of unique edges
 parser.add_argument('--maxnodes', type=int, help='maximum size of network to attempt cycle detection for')
 parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
 parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in common with an already drawn subnetwork')
+parser.add_argument('--negative', action='store_true', help='find fused negative feedback loops (not PFLs)')
 args = parser.parse_args()
 
 graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
@@ -35,7 +36,7 @@ def printnewnodes(nodes):
 
 while type1 < args.count1 or type2 < args.count2:
     feasible = graph if args.maxnodes is None else permutenetwork.randomsubgraph(graph, args.maxnodes)
-    cycles = [cycle for cycle in liuwangcycles.cyclesgenerator(feasible, args.maxcycle) if ispositive(feasible, cycle)]
+    cycles = [cycle for cycle in liuwangcycles.cyclesgenerator(feasible, args.maxcycle) if ispositive(feasible, cycle) ^ args.negative]
     if len(cycles) < 3:
         if not args.maxnodes:
             break
