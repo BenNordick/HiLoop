@@ -115,6 +115,18 @@ def serialize_attractor(info):
     else:
         return list(info)
 
+def findattractors(runner, ic_sets, time, dt, print_warnings=False):
+    sols = []
+    points = round(time / dt) + 1
+    for ii, ini_comb in enumerate(ic_sets):
+        for iv, v in enumerate(runner.fs()):
+            runner[v] = ini_comb[iv] # Set initial condition
+        sim_points = runner.simulate(start=0, end=time, points=points)
+        attractor = describe_attractor(sim_points, dt, print_warnings)
+        if attractor is not None and all(not equivalent_attractors(attractor, e) for e in sols):
+            sols.append(attractor)
+    return sols
+
 # Adapted from a script written by Tian Hong 9/21/2020
 def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_oscillators=None, time=50, dt=5, fix_params=None, ignore_ptypes='g', print_results=False):
 
@@ -128,7 +140,7 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_os
 
     # Ranges of parameter values to sample
     doms = {'K': [0.05, 4.5], 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6], 'g': [-1, 1]}
-    rands = np.random.uniform(size=(n_psets, len(runner.ps()))) # Random numbers for perturbing parameters
+    rands = np.random.uniform(size=(n_psets, len(runner.ps()))) # Random numbers for picking/scaling parameters
 
     results = {'species_names': runner.fs(), 'parameter_names': runner.ps(), 'psets': [], 'ftpoints': points >> 1, 'tested_psets': n_psets}
     for i in range(n_psets):
@@ -144,14 +156,7 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_os
         if fix_params:
             for k, v in fix_params.items():
                 runner[k] = v
-        sols = []
-        for ii, ini_comb in enumerate(ini_combs):
-            for iv, v in enumerate(runner.fs()):
-                runner[v] = ini_comb[iv] # Set initial condition
-            sim_points = runner.simulate(start=0, end=time, points=points)
-            attractor = describe_attractor(sim_points, dt, print_results)
-            if attractor is not None and all(not equivalent_attractors(attractor, e) for e in sols):
-                sols.append(attractor)
+        sols = findattractors(runner, ini_combs, time, dt, print_results)
         n_oscillatory_sols = sum(1 for a in sols if isinstance(a, dict))
         if len(sols) >= min_attractors or (min_oscillators is not None and n_oscillatory_sols >= min_oscillators):
             if print_results:
