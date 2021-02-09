@@ -1,0 +1,319 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+  <key id="d1" for="edge" attr.name="repress" attr.type="boolean" />
+  <key id="d0" for="node" attr.name="name" attr.type="string" />
+  <graph edgedefault="directed">
+    <node id="0">
+      <data key="d0">FOXC2</data>
+    </node>
+    <node id="1">
+      <data key="d0">ZEB1</data>
+    </node>
+    <node id="2">
+      <data key="d0">KLF8</data>
+    </node>
+    <node id="3">
+      <data key="d0">CDH1</data>
+    </node>
+    <node id="4">
+      <data key="d0">miR-101</data>
+    </node>
+    <node id="5">
+      <data key="d0">ZEB2</data>
+    </node>
+    <node id="6">
+      <data key="d0">SNAI1</data>
+    </node>
+    <node id="7">
+      <data key="d0">miR-141</data>
+    </node>
+    <node id="8">
+      <data key="d0">TGF-beta</data>
+    </node>
+    <node id="9">
+      <data key="d0">miR-200a</data>
+    </node>
+    <node id="10">
+      <data key="d0">miR-200b</data>
+    </node>
+    <node id="11">
+      <data key="d0">miR-200c</data>
+    </node>
+    <node id="12">
+      <data key="d0">miR-205</data>
+    </node>
+    <node id="13">
+      <data key="d0">miR-30c</data>
+    </node>
+    <node id="14">
+      <data key="d0">SNAI2</data>
+    </node>
+    <node id="15">
+      <data key="d0">miR-34a</data>
+    </node>
+    <node id="16">
+      <data key="d0">TWIST2</data>
+    </node>
+    <node id="17">
+      <data key="d0">miR-9</data>
+    </node>
+    <node id="18">
+      <data key="d0">CDH2</data>
+    </node>
+    <node id="19">
+      <data key="d0">TWIST1</data>
+    </node>
+    <node id="20">
+      <data key="d0">TCF3</data>
+    </node>
+    <node id="21">
+      <data key="d0">GSC</data>
+    </node>
+    <edge source="0" target="1">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="1" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="1" target="18">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="1" target="7">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="1" target="10">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="1" target="11">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="1" target="9">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="1" target="15">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="1" target="1">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="2" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="4" target="2">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="4" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="4" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="4" target="6">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="5" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="5" target="18">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="5" target="10">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="5" target="11">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="5" target="9">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="5" target="5">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="6" target="18">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="0">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="6">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="6" target="14">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="19">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="1">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="5">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="6" target="15">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="6" target="4">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="7" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="7" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="7" target="8">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="8" target="21">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="8" target="6">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="8" target="14">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="9" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="9" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="9" target="8">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="10" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="10" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="10" target="8">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="11" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="11" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="11" target="8">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="12" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="12" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="13" target="6">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="13" target="14">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="13" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="14" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="14" target="18">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="14" target="14">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="14" target="16">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="14" target="4">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="14" target="10">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="15" target="6">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="15" target="14">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="15" target="16">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="15" target="1">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="16" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="16" target="6">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="16" target="14">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="16" target="19">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="16" target="1">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="16" target="5">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="17" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="17" target="5">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="19" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="19" target="18">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="19" target="0">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="19" target="6">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="19" target="14">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="19" target="20">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="19" target="1">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="19" target="5">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="20" target="3">
+      <data key="d1">True</data>
+    </edge>
+    <edge source="21" target="6">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="21" target="19">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="21" target="0">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="21" target="1">
+      <data key="d1">False</data>
+    </edge>
+    <edge source="21" target="5">
+      <data key="d1">False</data>
+    </edge>
+  </graph>
+</graphml>
