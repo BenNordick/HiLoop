@@ -165,30 +165,43 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_os
             results['psets'].append(result)
     return results
 
-def networksb(network):
+def networksb(network, model_form='multiplicative_hill'):
     '''Converts a NetworkX directed graph to an Antimony string.'''
+    if not model_form in {'multiplicative_hill', 'multiplicative_activation'}:
+        raise ValueError('Unsupported model_form')
     def safenodename(node):
         return network.nodes[node]['name'].replace('-', '').replace('.', '')
+    def interactionid(node, regulator):
+        return f'{safenodename(node)}_{safenodename(regulator)}'
+    def expterm(node, regulator):
+        interaction_id = interactionid(node, regulator)
+        return f'(X_{safenodename(regulator)} / K_{interaction_id})^n_{interaction_id}'
     parts = []
     for i, node in enumerate(network.nodes):
         parts.append(f'J{i}: -> X_{safenodename(node)}; g_{safenodename(node)} * (k_{safenodename(node)} * ((1 - r_{safenodename(node)}) + r_{safenodename(node)}')
-        for regulator in network.predecessors(node):
-            interaction_id = f'{safenodename(node)}_{safenodename(regulator)}'
-            exp_term = f'(X_{safenodename(regulator)} / K_{interaction_id})^n_{interaction_id}'
-            if network.edges[regulator, node]['repress']:
-                parts.append(f' * 1 / (1 + {exp_term})')
-            else:
-                parts.append(f' * {exp_term} / (1 + {exp_term})')
+        if model_form == 'multiplicative_hill':
+            for regulator in network.predecessors(node):
+                if network.edges[regulator, node]['repress']:
+                    parts.append(f' * 1 / (1 + {expterm(node, regulator)})')
+                else:
+                    parts.append(f' * {expterm(node, regulator)} / (1 + {expterm(node, regulator)})')
+        else:
+            for regulator in network.predecessors(node):
+                if network.edges[regulator, node]['repress']:
+                    raise ValueError('Repression is not supported in multiplicative_activation form')
+            activator_product = ' * '.join([expterm(node, regulator) for regulator in network.predecessors(node)])
+            if len(activator_product) == 0:
+                raise ValueError(f'{node}: Must have at least one activator in multiplicative_activation form')
+            parts.append(f' * ({activator_product}) / (1 + {activator_product})')
         parts.append(f') - X_{safenodename(node)})\n')
         parts.append(f'X_{safenodename(node)} = 0.1\nk_{safenodename(node)} = 3.0\nr_{safenodename(node)} = 0.99\ng_{safenodename(node)} = 1.0\n')
     for regulator, target in network.edges:
-        interaction_id = f'{safenodename(target)}_{safenodename(regulator)}'
-        parts.append(f'\nK_{interaction_id} = 1.0; n_{interaction_id} = 4;')
+        parts.append(f'\nK_{interactionid(target, regulator)} = 1.0; n_{interactionid(target, regulator)} = 4;')
     return ''.join(parts)
     
-def networkmodel(network):
+def networkmodel(network, model_form='multiplicative_hill'):
     '''Converts a NetworkX directed graph to a Tellurium model.'''
-    return te.loada(networksb(network))
+    return te.loada(networksb(network, model_form))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
