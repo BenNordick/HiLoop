@@ -53,7 +53,7 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     type1_est, type2_est = estimatecount(type1, type2, samples, len(cycles), pfls)
     return pfls, pfl_ratio, type1_est, type2_est
 
-def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None):
+def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, fixed_sign_sources=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
     base_results = [0, 0, 0, 0]
     for _ in range(base_trials):
@@ -64,7 +64,7 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
         base_results[component] /= base_trials
     print('Base results:', base_results)
     permutation_results = [[] for _ in base_results]
-    for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample):
+    for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample, fixed_sign_sources):
         for component, value in enumerate(summarize(permutation, samples, max_motif_size, max_cycle_length)):
             permutation_results[component].append(value)
         if checked_permutations == permutations:
@@ -91,9 +91,10 @@ if __name__ == "__main__":
     parser.add_argument('--desonly', action='store_true', help='use only double-edge swaps for permutation')
     parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
     parser.add_argument('--maxmotifsize', type=int, help='maximum number of nodes in a motif')
+    parser.add_argument('--fixedsign', type=str, help='regex matching nodes whose source regulations to preserve signs of')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    empirical_cdfs, p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle)
+    empirical_cdfs, p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
     column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2']
     print('\tFracLE\tp')
     for i, column in enumerate(column_names):

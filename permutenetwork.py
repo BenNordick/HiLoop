@@ -1,6 +1,7 @@
 from collections import deque
 import networkx as nx
 import random
+import re
 
 def permutenetwork(graph):
     '''Randomly moves regulations, preserving degree sequence.'''
@@ -44,9 +45,11 @@ def permuteedgeswaps(graph):
     return graph
 
 def reversedirectedtriangle(graph, a, b, c):
-    for src, dest in [(a, b), (b, c), (c, a)]:
+    legs = [(a, b), (b, c), (c, a)]
+    for src, dest in legs:
         if graph.has_edge(dest, src):
-            continue
+            return
+    for src, dest in legs:
         data = graph.edges[src, dest]
         graph.remove_edge(src, dest)
         graph.add_edge(dest, src, **data)
@@ -64,6 +67,35 @@ def permuteregulations(graph):
     for new_repression in random.sample(edges, repressions):
         copy.edges[new_repression]['repress'] = True
     return copy
+
+def restorefixedsigns(original, graph, pattern):
+    fixed_sign_source_nodes = set(n for n in graph.nodes if re.match(pattern, graph.nodes[n]['name']) is not None)
+    available_repressions = [e for e in graph.edges if graph.edges[e]['repress'] and e[0] not in fixed_sign_source_nodes]
+    available_activations = [e for e in graph.edges if (not graph.edges[e]['repress']) and e[0] not in fixed_sign_source_nodes]
+    for src in fixed_sign_source_nodes:
+        if graph.nodes[src]['name'] != original.nodes[src]['name']:
+            raise AssertionError('ID mismatch')
+        current_repressions = [(src, n) for n in graph[src] if graph.edges[src, n]['repress']]
+        current_activations = [(src, n) for n in graph[src] if not graph.edges[src, n]['repress']]
+        n_original_repressions = len([n for n in original[src] if original.edges[src, n]['repress']])
+        while len(current_repressions) > n_original_repressions:
+            extra_repression = random.choice(current_repressions)
+            old_activation = random.choice(available_activations)
+            graph.edges[extra_repression]['repress'] = False
+            graph.edges[old_activation]['repress'] = True
+            current_repressions.remove(extra_repression)
+            current_activations.append(extra_repression)
+            available_activations.remove(old_activation)
+            available_repressions.append(old_activation)
+        while len(current_repressions) < n_original_repressions:
+            extra_activation = random.choice(current_activations)
+            old_repression = random.choice(available_repressions)
+            graph.edges[extra_activation]['repress'] = True
+            graph.edges[old_repression]['repress'] = False
+            current_activations.remove(extra_activation)
+            current_repressions.append(extra_activation)
+            available_repressions.remove(old_repression)
+            available_activations.append(old_repression)
 
 def randomsubgraph(graph, max_nodes):
     queue = deque(maxlen=len(graph.nodes))
@@ -96,7 +128,7 @@ def neighborhoodsubgraph(graph, start_node, depth):
         level += 1
     return graph.subgraph(selected)
 
-def generatepermutations(graph, require_connected, use_full_permutation=True, max_nodes_for_sample=None):
+def generatepermutations(graph, require_connected, use_full_permutation=True, max_nodes_for_sample=None, fixed_sign_sources=None):
     last_permutation = graph
     checked_permutations = 0
     while True:
@@ -106,6 +138,8 @@ def generatepermutations(graph, require_connected, use_full_permutation=True, ma
             last_permutation = permuteedgeswaps(permuteregulations(last_permutation))
         if require_connected and not nx.algorithms.is_strongly_connected(last_permutation):
             continue
+        if fixed_sign_sources is not None:
+            restorefixedsigns(graph, last_permutation, fixed_sign_sources)
         feasible_subgraph = last_permutation if max_nodes_for_sample is None else randomsubgraph(last_permutation, max_nodes_for_sample)
         checked_permutations += 1
         yield checked_permutations, feasible_subgraph
