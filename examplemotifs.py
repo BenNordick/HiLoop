@@ -13,7 +13,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='input GraphML file')
 parser.add_argument('count1', type=int, help='how many Type I examples to find')
 parser.add_argument('count2', type=int, help='how many Type II examples to find')
-parser.add_argument('--images', type=str, help='output file pattern {id, edges, type}')
+parser.add_argument('--images', type=str, help='output image file pattern {id, edges, type}')
+parser.add_argument('--networks', type=str, help='output GraphML file pattern {id, type}')
 parser.add_argument('--printnodes', action='store_true', help='print distinct node names')
 parser.add_argument('--maxedges', type=int, help='maximum number of unique edges in examples')
 parser.add_argument('--maxnodes', type=int, help='maximum size of network to attempt cycle detection for')
@@ -61,6 +62,8 @@ while type1 < args.count1 or type2 < args.count2:
             seen.append(used_nodes)
             type1 += 1
             printnewnodes(used_nodes)
+            if args.networks:
+                nx.write_graphml(subgraph, args.networks.format(type1, 1))
             if args.images:
                 colored = colorsubgraph(subgraph, *chosen_cycles)
                 for n in intersection:
@@ -77,6 +80,8 @@ while type1 < args.count1 or type2 < args.count2:
                 seen.append(used_nodes)
                 type2 += 1
                 printnewnodes(used_nodes)
+                if args.networks:
+                    nx.write_graphml(subgraph, args.networks.format(type2, 2))
                 if args.images:
                     colored = colorsubgraph(subgraph, chosen_cycles[(connector_c + 1) % 3], chosen_cycles[connector_c], chosen_cycles[(connector_c + 2) % 3])
                     rendergraph.rendergraph(colored, args.images.format(type2, len(colored.edges), 2), in_place=True)
