@@ -211,7 +211,7 @@ class AverageLog():
         name = self.names[index]
         return prefix + (name[2:] if name.startswith('X_') else name)
 
-def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=None):
+def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -264,8 +264,10 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
                     matrix = np.vstack((matrix, caricature))
                     unique_fingerprints = np.vstack((unique_fingerprints, fingerprint))
                     row_redundancies.append(1)
-    cg = sns.clustermap(matrix, col_cluster=False, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, 0), xticklabels=gene_names, yticklabels=False, cmap='seismic')
+    gene_dendrogram_ratio = 0.1 if bicluster else 0
+    cg = sns.clustermap(matrix, col_cluster=bicluster, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, gene_dendrogram_ratio), xticklabels=gene_names, yticklabels=False, cmap='seismic')
     matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
+    gene_display_ind = {v: k for k, v in enumerate(cg.dendrogram_col.reordered_ind)} if bicluster else {n: n for n in range(len(gene_names))}
     heatmap_index = 1 if fold_dist is None else 2
     width_ratios = [2, 8]
     if arcs:
@@ -273,12 +275,16 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
     if fold_dist is not None:
         width_ratios.insert(1, width_ratios[1] * len(gene_names) * 0.01)
         width_ratios[2] -= width_ratios[1]
-    new_gs = plt.GridSpec(1, len(width_ratios), figure=cg.fig, width_ratios=width_ratios)
-    cg.ax_heatmap.set_position(new_gs[heatmap_index].get_position(cg.fig))
-    cg.ax_col_dendrogram.set_position(new_gs[0].get_position(cg.fig))
+    rows = 2 if bicluster else 1
+    main_row = rows - 1
+    height_ratios = (1, 9) if bicluster else None
+    new_gs = plt.GridSpec(rows, len(width_ratios), figure=cg.fig, width_ratios=width_ratios, height_ratios=height_ratios)
+    cg.ax_heatmap.set_position(new_gs[main_row, heatmap_index].get_position(cg.fig))
+    if bicluster:
+        cg.ax_col_dendrogram.set_position(new_gs[0, heatmap_index].get_position(cg.fig))
     if arcs:
         for fpt_id, summary in enumerate(sorted(filtered_pset_types.keys(), key=lambda am: am[0] * 100 + am[1], reverse=True)):
-            ax_arcs = cg.fig.add_subplot(new_gs[heatmap_index + 1 + fpt_id], sharey=cg.ax_heatmap)
+            ax_arcs = cg.fig.add_subplot(new_gs[main_row, heatmap_index + 1 + fpt_id], sharey=cg.ax_heatmap)
             ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
             color_cycle = ax_arcs._get_lines.prop_cycler
             for pset_id, pset in enumerate(filtered_pset_types[summary]):
@@ -299,11 +305,12 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
                 display_y = matrix_display_ind[index]
                 orbit = np.array(attr['orbit'])
                 for x in range(orbit.shape[1]):
-                    x_stops = np.linspace(x, x + 1, orbit.shape[0] * osc_orbits)
+                    display_x = gene_display_ind[x]
+                    x_stops = np.linspace(display_x, display_x + 1, orbit.shape[0] * osc_orbits)
                     color_stops = np.tile(np.vstack((orbit[:, x], orbit[:, x])), osc_orbits)
                     cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
     if fold_dist is not None:
-        ax_redundancy = cg.fig.add_subplot(new_gs[1], sharey=cg.ax_heatmap)
+        ax_redundancy = cg.fig.add_subplot(new_gs[main_row, 1], sharey=cg.ax_heatmap)
         y_stops = np.arange(0, matrix.shape[0] + 1)
         reordered_redundancies = np.zeros((matrix.shape[0], 1))
         for i, redundancy in enumerate(row_redundancies):
@@ -335,6 +342,7 @@ if __name__ == "__main__":
     heatmap_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
     heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
     heatmap_parser.add_argument('--fold', type=float, help='distance under which attractors will be combined into one heatmap row')
+    heatmap_parser.add_argument('--bicluster', action='store_true', help='also cluster genes')
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
@@ -344,6 +352,6 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample))
     elif args.command == 'heatmap':
-        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits, fold_dist=args.fold)
+        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=150)
     plt.close()
