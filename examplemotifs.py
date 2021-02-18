@@ -21,11 +21,13 @@ parser.add_argument('--maxnodes', type=int, help='maximum size of network to att
 parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
 parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in common with an already drawn subnetwork')
 parser.add_argument('--negative', action='store_true', help='find fused negative feedback loops (not PFLs)')
+parser.add_argument('--reduceedges', action='store_true', help='randomly drop some extra edges')
 args = parser.parse_args()
 
 graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
 type1, type2 = 0, 0
 seen = []
+seen_edgesets = []
 printed_nodes = set()
 
 def printnewnodes(nodes):
@@ -34,6 +36,25 @@ def printnewnodes(nodes):
     for n in nodes.difference(printed_nodes):
         printed_nodes.add(n)
         print(graph.nodes[n]['name'])
+
+def reduceedges(subgraph, cycles):
+    if args.reduceedges:
+        trimmed = nx.DiGraph()
+        trimmed.add_nodes_from(subgraph.nodes)
+        for n in trimmed.nodes:
+            trimmed.nodes[n]['name'] = subgraph.nodes[n]['name']
+        necessary_edges = set()
+        for cycle in cycles:
+            for i in range(len(cycle)):
+                edge = (cycle[i], cycle[(i + 1) % len(cycle)])
+                necessary_edges.add(edge)
+                trimmed.add_edge(edge[0], edge[1], repress=subgraph.edges[edge]['repress'])
+        for e in subgraph.edges:
+            if (e not in necessary_edges) and random.uniform(0, 1) < (2 / 3):
+                trimmed.add_edge(e[0], e[1], repress=subgraph.edges[e]['repress'])
+        return trimmed
+    else:
+        return subgraph
 
 while type1 < args.count1 or type2 < args.count2:
     feasible = graph if args.maxnodes is None else permutenetwork.randomsubgraph(graph, args.maxnodes)
@@ -53,9 +74,13 @@ while type1 < args.count1 or type2 < args.count2:
                 break
         if duplicate:
             continue
-    subgraph = graph.subgraph(used_nodes)
+    subgraph = reduceedges(graph.subgraph(used_nodes), chosen_cycles)
     if args.maxedges is not None and len(subgraph.edges) > args.maxedges:
         continue
+    edges_set = set(subgraph.edges)
+    if edges_set in seen_edgesets:
+        continue
+    seen_edgesets.append(edges_set)
     if type1 < args.count1:
         intersection = cycle_sets[0].intersection(cycle_sets[1]).intersection(cycle_sets[2])
         if len(intersection) > 0:
