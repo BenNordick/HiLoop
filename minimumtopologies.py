@@ -81,3 +81,23 @@ def ispositive(graph, cycle):
         positive ^= graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]['repress']
     return positive
     
+def ismutualinhibition(graph, connector_cycle, cycle1, cycle2):
+    cycle1 = cycle1 if isinstance(cycle1, frozenset) else frozenset(cycle1)
+    cycle2 = cycle2 if isinstance(cycle2, frozenset) else frozenset(cycle2)
+    cc_len = len(connector_cycle)
+    i = 0
+    while not (connector_cycle[i] in cycle1 and connector_cycle[(i + 1) % cc_len] not in cycle1):
+        i += 1
+    repress = False
+    while connector_cycle[i % cc_len] not in cycle2:
+        repress ^= graph.edges[connector_cycle[i % cc_len], connector_cycle[(i + 1) % cc_len]]['repress']
+        i += 1
+    if not repress:
+        return False
+    while connector_cycle[(i + 1) % cc_len] in cycle2:
+        i += 1
+    repress = False
+    while connector_cycle[i % cc_len] not in cycle1:
+        repress ^= graph.edges[connector_cycle[i % cc_len], connector_cycle[(i + 1) % cc_len]]['repress']
+        i += 1
+    return repress

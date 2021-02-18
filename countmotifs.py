@@ -2,20 +2,20 @@ import argparse
 from collections import Counter
 from identityholder import IdentityHolder
 import liuwangcycles
-from minimumtopologies import ispositive
+from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
 import rendergraph
 import sys
 
 launched_specifically = False
 
-def countmotifs(network, max_cycle_length=None, max_motif_size=None):
+def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=False):
     if launched_specifically:
         print('Finding cycles')
-    cycle_sets = [IdentityHolder(frozenset(cycle), cycle) for cycle in liuwangcycles.generatecycles(network, max_cycle_length) if ispositive(network, cycle)]
+    cycle_sets = [IdentityHolder(frozenset(cycle), (cycle, ispositive(network, cycle))) for cycle in liuwangcycles.generatecycles(network, max_cycle_length) if check_nfl or ispositive(network, cycle)]
     cycle_edge_sets = dict()
     for holder in cycle_sets:
-        cycle = holder.tag
+        cycle = holder.tag[0]
         edge_set = frozenset((cycle[n], cycle[(n + 1) % len(cycle)]) for n in range(len(cycle)))
         cycle_edge_sets[holder] = edge_set
     if launched_specifically:
@@ -45,16 +45,20 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
                 all_edges = all_edges.union(cycle_edge_sets[holders[cn]])
             if cycle_edge_sets[common_neighbor] < all_edges:
                 yield common_neighbor
-    def coverextracycle(holder1, holder2):
+    def coverextrapfl(holder1, holder2):
         for common_neighbor in set(cycle_edge_graph[holder1]).intersection(set(cycle_edge_graph[holder2])):
-            if cycle_edge_sets[common_neighbor] < cycle_edge_sets[holder1].union(cycle_edge_sets[holder2]):
+            if common_neighbor.tag[1] and cycle_edge_sets[common_neighbor] < cycle_edge_sets[holder1].union(cycle_edge_sets[holder2]):
                 return True
         return False
     if launched_specifically:
         print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
-        print('Searching for Type I motifs')
+        print('Searching for Type I and excitable motifs')
     type1 = 0
+    excitable = 0
     for a, b, c in findtriangles(cycle_graph):
+        possible_type1 = (not check_nfl) or (a.tag[1] and b.tag[1] and c.tag[1])
+        if check_nfl and not (a.tag[1] or b.tag[1] or c.tag[1]):
+            continue
         shared_nodes = cycle_graph.edges[a, b]['shared'].intersection(cycle_graph.edges[b, c]['shared'])
         if len(shared_nodes) == 0:
             continue
@@ -64,15 +68,16 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
                 if len(all_nodes) > max_motif_size:
                     continue
             extra_cycles = [*findinducedcycles([a, b], c), *findinducedcycles([a, c], b), *findinducedcycles([b, c], a), *findinducedcycles([a, b, c])]
-            if len(extra_cycles) > 0:
+            relevant_extras = [c for c in extra_cycles if c.tag[1]] if possible_type1 else extra_cycles
+            if len(relevant_extras) > 0:
                 double_counting = False
-                for extra in extra_cycles:
+                for extra in relevant_extras:
                     if extra.isbefore(c):
                         double_counting = True
                         break
                 if double_counting:
                     continue
-                all_cycles = [a, b, c] + extra_cycles
+                all_cycles = [a, b, c] + relevant_extras
                 all_edges = cycle_edge_sets[a].union(cycle_edge_sets[b]).union(cycle_edge_sets[c])
                 found_extra = False
                 for edge in all_edges:
@@ -85,15 +90,32 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
                         break
                 if found_extra:
                     continue
-            type1 += 1
+            if possible_type1:
+                type1 += 1
+            else:
+                excitable += 1
+    if launched_specifically and check_nfl:
+        print('Searching for fused PFL-NFL pairs')
+    fpnp = 0
+    if check_nfl:
+        for holder1, holder2 in cycle_graph.edges:
+            if holder1.tag[1] != holder2.tag[1]:
+                if max_motif_size:
+                    all_nodes = holder1.value.union(holder2.value)
+                    if len(all_nodes) > max_motif_size:
+                        continue
+                fpnp += 1
     if launched_specifically:
-        print('Searching for Type II motifs')
+        print('Searching for Type II and MISA motifs')
     checked = 0
     type2 = 0
+    misa = 0
     for holder in cycle_sets:
-        neighbors = list(cycle_graph.neighbors(holder))
+        if not holder.tag[1]:
+            continue
+        neighbors = [h for h in cycle_graph.neighbors(holder) if h.tag[1]]
         for i1, neigh1 in enumerate(neighbors):
-            if coverextracycle(holder, neigh1):
+            if coverextrapfl(holder, neigh1):
                 continue
             for i2 in range(i1 + 1, len(neighbors)):
                 neigh2 = neighbors[i2]
@@ -103,13 +125,16 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None):
                         continue
                 if cycle_graph.has_edge(neigh1, neigh2):
                     continue
-                if coverextracycle(holder, neigh2):
+                if coverextrapfl(holder, neigh2):
                     continue
                 type2 += 1
+                if ismutualinhibition(network, holder.tag[0], neigh1.value, neigh2.value):
+                    misa += 1
         if launched_specifically:
             checked += 1
             print(f'{checked}\r', end='')
-    return (len(cycle_sets), type1, type2)
+    pfls = sum(1 for holder in cycle_sets if holder.tag[1])
+    return (pfls, type1, type2, misa, excitable, fpnp)
 
 def findtriangles(graph):
     checked = 0
@@ -128,8 +153,11 @@ if __name__ == "__main__":
     parser.add_argument('file', type=str, help='GraphML file to process')
     parser.add_argument('--maxcycle', type=int, help='maximum cycle length')
     parser.add_argument('--maxnodes', type=int, help='maximum number of nodes in a motif')
+    parser.add_argument('--checknfl', action='store_true', help='also search for motifs involving negative feedback')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    result = countmotifs(graph, args.maxcycle, args.maxnodes)
-    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], sep='\t')
+    result = countmotifs(graph, args.maxcycle, args.maxnodes, args.checknfl)
+    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], sep='\t')
+    if args.checknfl:
+        print('Excit', result[4], '\nFuse+-', result[5], sep='\t')
     
