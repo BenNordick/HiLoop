@@ -28,15 +28,22 @@ def colorcycle(graph, cycle, color, mix_color):
 def colorcycles(graph, cycles):
     multigraph = nx.MultiDiGraph(graph)
     colored_edges = set()
-    for cycle, color in cycles:
+    for cycle_info in cycles:
+        if len(cycle_info) < 3:
+            cycle, color = cycle_info
+            style = 'solid'
+        else:
+            cycle, color, style = cycle_info
         for i in range(len(cycle)):
             src = cycle[i]
             dst = cycle[(i + 1) % len(cycle)]
             if (src, dst) in colored_edges:
                 route = multigraph.add_edge(src, dst, **graph.edges[src, dst])
                 multigraph.edges[src, dst, route]['color'] = color
+                multigraph.edges[src, dst, route]['style'] = style
             else:
                 multigraph.edges[src, dst, 0]['color'] = color
+                multigraph.edges[src, dst, 0]['style'] = style
                 colored_edges.add((src, dst))
     return multigraph
 
