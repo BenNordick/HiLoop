@@ -1,7 +1,7 @@
 import argparse
 from identityholder import IdentityHolder
 import liuwangcycles
-from minimumtopologies import ispositive
+from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
 import numpy as np
 import permutenetwork
@@ -9,53 +9,59 @@ import random
 from scipy.special import comb
 import scipy.stats
 
-def istype1(cycle_sets):
+def isfused(cycle_sets):
     intersection = cycle_sets[0]
     for cycle in cycle_sets[1:]:
         intersection = intersection.intersection(cycle)
     return len(intersection) > 0
 
-def istype2(cycle_sets):
+def findconnector(cycle_sets):
     for connector_c, connector in enumerate(cycle_sets):
         other1 = cycle_sets[(connector_c + 1) % 3]
         other2 = cycle_sets[(connector_c + 2) % 3]
         if connector.isdisjoint(other1) or connector.isdisjoint(other2):
             continue
         if other1.isdisjoint(other2):
-            return True
-    return False
-
-def estimatecount(type1_samples, type2_samples, sample_attempts, cycle_count, pfl_count):
-    type1 = type1_samples * comb(cycle_count, 3) / sample_attempts
-    type2 = type2_samples * comb(cycle_count, 3) / sample_attempts
-    return type1, type2
+            return connector_c
+    return None
 
 def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
-    cycles = [(frozenset(cycle), ispositive(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
+    cycles = [(frozenset(cycle), ispositive(graph, cycle), cycle) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
     pfls = len([0 for cycle in cycles if cycle[1]])
     pfl_ratio = pfls / len(cycles) if len(cycles) > 0 else 0.0
     if len(cycles) < 3:
-        return pfls, pfl_ratio, 0, 0
-    type1, type2 = 0, 0
+        return pfls, pfl_ratio, 0, 0, 0, 0
+    fused3, bridged2, type1, type2, misa, excitable = 0, 0, 0, 0, 0, 0
     for _ in range(samples):
         chosen = random.sample(cycles, 3)
-        if [entry[1] for entry in chosen] != [True] * 3:
-            continue
         chosen_cycles = [entry[0] for entry in chosen]
         if max_motif_size:
             all_nodes = chosen_cycles[0].union(chosen_cycles[1]).union(chosen_cycles[2])
             if len(all_nodes) > max_motif_size:
                 continue
-        if istype1(chosen_cycles):
-            type1 += 1
-        elif istype2(chosen_cycles):
-            type2 += 1
-    type1_est, type2_est = estimatecount(type1, type2, samples, len(cycles), pfls)
-    return pfls, pfl_ratio, type1_est, type2_est
+        all_positive = all(entry[1] for entry in chosen)
+        if isfused(chosen_cycles):
+            fused3 += 1
+            if all_positive:
+                type1 += 1
+            elif any(entry[1] for entry in chosen):
+                excitable += 1
+        else:
+            connector_index = findconnector(chosen_cycles)
+            if connector_index is not None:
+                bridged2 += 1
+                if all_positive:
+                    type2 += 1
+                    if ismutualinhibition(graph, chosen[connector_index][2], chosen_cycles[(connector_index + 1) % 3], chosen_cycles[(connector_index + 2) % 3]):
+                        misa += 1
+    sample3_adjustment = comb(len(cycles), 3) / samples
+    type1_est = type1 * sample3_adjustment
+    type2_est = type2 * sample3_adjustment
+    return pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, excitable * sample3_adjustment, type1 / fused3, type2 / bridged2
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, fixed_sign_sources=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
-    base_results = [0, 0, 0, 0]
+    base_results = [0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, Excite, T1/F3, F2/Brdg
     for _ in range(base_trials):
         feasible_base_subgraph = graph if max_nodes_for_sample is None else permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
         for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size, max_cycle_length)):
@@ -95,7 +101,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
     empirical_cdfs, p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
-    column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2']
+    column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'Excite', 'T1/Fus3', 'T2/Brdg']
     print('\tFracLE\tp')
     for i, column in enumerate(column_names):
         print(column, empirical_cdfs[i], p_values[i], sep='\t')
