@@ -30,6 +30,7 @@ parser.add_argument('--maxnodes', type=int, help='maximum size of network to att
 parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
 parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in common with an already selected subnetwork')
 parser.add_argument('--reduceedges', action='store_true', help='randomly drop some extra edges')
+parser.add_argument('--requirenodes', nargs='+', type=str, help='node(s) that must be present in the subnetwork')
 args = parser.parse_args()
 
 graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
@@ -84,6 +85,10 @@ def pickcycles(count):
     used_nodes = cycle_sets[0]
     for cs in cycle_sets[1:]:
         used_nodes = used_nodes.union(cs)
+    if args.requirenodes is not None:
+        used_names = {graph.nodes[n]['name'] for n in used_nodes}
+        if not used_names.issuperset(args.requirenodes):
+            return None
     if args.maxsharing is not None:
         for ns in seen:
             if len(ns.intersection(used_nodes)) > args.maxsharing:
