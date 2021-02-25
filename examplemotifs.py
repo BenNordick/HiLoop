@@ -16,8 +16,8 @@ def colorsubgraph(graph, r, y, b):
         return 'solid' if ispositive(graph, cycle) else 'dashed'
     return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))])
 
-def logobase():
-    ag = pygraphviz.AGraph(bgcolor='lightgray', strict=False, directed=True, ranksep=0.3, nodesep=0.6)
+def logobase(**kwargs):
+    ag = pygraphviz.AGraph(bgcolor='#D0D0D0', strict=False, directed=True, ranksep=0.3, **kwargs)
     ag.edge_attr['arrowsize'] = 0.8
     return ag
 
@@ -36,7 +36,7 @@ def logo_fpnp(fusion_nodes):
 def logo_3fused(fusion_nodes, positivities):
     styles = [('solid' if positive else 'dashed') for positive in positivities]
     tips = [('normal' if positive else 'tee') for positive in positivities]
-    ag = logobase()
+    ag = logobase(nodesep=0.6)
     ag.add_node('L3', shape='point', width=0.001, color='blue')
     ag.add_node('X', label=',\n'.join(fusion_nodes), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
     ag.add_edge('L3', 'X', arrowhead=tips[2], color='blue', style=styles[2])
@@ -124,13 +124,23 @@ def createimage(graph, filename, logo_func):
     if args.logo:
         logo = logo_func()
         logo_w, logo_h = logo.size
-        main_ag = rendergraph.graphvizify(graph, in_place=True)
+        main_ag = rendergraph.graphvizify(graph, in_place=True, layout=None)
+        main_ag.add_node('Logo', label='', shape='box', style='filled', color='#D0D0D0', width=(logo_w / 96), height=(logo_h / 96))
+        main_ag.layout('dot')
         main = Image.open(io.BytesIO(main_ag.draw(format='png')))
         main_w, main_h = main.size
-        merged = Image.new('RGB', (logo_w + main_w, main_h), 'white')
-        merged.paste(logo, None)
-        merged.paste(main, (logo_w, 0))
-        merged.save(filename)
+        found_placeholder = False
+        for y in range(main_h):
+            for x in range(main_w):
+                if main.getpixel((x, y))[:3] == (0xD0, 0xD0, 0xD0) == main.getpixel((x + 5, y + 5))[:3]:
+                    main.paste(logo, (x, y))
+                    found_placeholder = True
+                    break
+            if found_placeholder:
+                break
+        if not found_placeholder:
+            print('Could not find logo placeholder')
+        main.save(filename)
     else:
         rendergraph.rendergraph(graph, filename, in_place=True)
 
