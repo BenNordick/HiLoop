@@ -1,8 +1,11 @@
 import argparse
+import io
 import liuwangcycles
-from minimumtopologies import ispositive, ismutualinhibition
+from minimumtopologies import ispositive, ismutualinhibition, ishalfinhibition
 import networkx as nx
 import permutenetwork
+from PIL import Image
+import pygraphviz
 import random
 import rendergraph
 
@@ -11,7 +14,52 @@ def colorsubgraph(graph, r, y, b):
         if len(cycle) == 0:
             return 'solid'
         return 'solid' if ispositive(graph, cycle) else 'dashed'
-    return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))]) 
+    return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))])
+
+def logobase():
+    ag = pygraphviz.AGraph(bgcolor='lightgray', strict=False, directed=True, ranksep=0.3, nodesep=0.6)
+    ag.edge_attr['arrowsize'] = 0.8
+    return ag
+
+def logoimage(ag):
+    ag.layout('dot')
+    png_bytes = ag.draw(format='png')
+    return Image.open(io.BytesIO(png_bytes))
+
+def logo_fpnp(fusion_nodes):
+    ag = logobase()
+    ag.add_node('X', label=',\n'.join(fusion_nodes), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_edge('X', 'X', 0, color='red', style='dashed', arrowhead='tee', headport='ne', tailport='se')
+    ag.add_edge('X', 'X', 1, color='blue', headport='sw', tailport='nw')
+    return logoimage(ag)
+
+def logo_3fused(fusion_nodes, positivities):
+    styles = [('solid' if positive else 'dashed') for positive in positivities]
+    tips = [('normal' if positive else 'tee') for positive in positivities]
+    ag = logobase()
+    ag.add_node('L3', shape='point', width=0.001, color='blue')
+    ag.add_node('X', label=',\n'.join(fusion_nodes), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_edge('L3', 'X', arrowhead=tips[2], color='blue', style=styles[2])
+    ag.add_edge('X', 'L3', arrowhead='none', color='blue', style=styles[2])
+    ag.add_node('L1', shape='point', width=0.001, color='red')
+    ag.add_edge('X', 'L1', arrowhead='none', color='red', style=styles[0])
+    ag.add_edge('L1', 'X', arrowhead=tips[0], color='red', style=styles[0])
+    ag.add_node('L2', shape='point', width=0.001, color='gold')
+    ag.add_edge('X', 'L2', arrowhead='none', color='gold', style=styles[1])
+    ag.add_edge('L2', 'X', arrowhead=tips[1], color='gold', style=styles[1])
+    return logoimage(ag)
+
+def logo_2bridged(fusion1, fusion2, positivities, half12_positive, half21_positive):
+    styles = [('solid' if positive else 'dashed') for positive in positivities]
+    tips = [('normal' if positive else 'tee') for positive in positivities]
+    ag = logobase()
+    ag.add_node('C1', label=',\n'.join(fusion1), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_node('C2', label=',\n'.join(fusion2), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_edge('C1', 'C1', color='red', style=styles[0], arrowhead=tips[0])
+    ag.add_edge('C1', 'C2', color='gold', style=styles[1], arrowhead=('normal' if half12_positive else 'tee'))
+    ag.add_edge('C2', 'C1', color='gold', style=styles[1], arrowhead=('normal' if half21_positive else 'tee'))
+    ag.add_edge('C2', 'C2', color='blue', style=styles[2], arrowhead=tips[2])
+    return logoimage(ag)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='input GraphML file')
@@ -23,6 +71,7 @@ parser.add_argument('--findnegative1', type=int, default=0, help='how many negat
 parser.add_argument('--findnegative2', type=int, default=0, help='how many negative Type II examples to find')
 parser.add_argument('-p', '--findfpnp', type=int, default=0, help='how many fused PFL/NFL pair examples to find')
 parser.add_argument('--images', type=str, help='output image file pattern {id, type, edges}')
+parser.add_argument('--logo', action='store_true', help='add motif summary/logo to saved images')
 parser.add_argument('--networks', type=str, help='output GraphML file pattern {id, type}')
 parser.add_argument('--printnodes', action='store_true', help='print distinct node names')
 parser.add_argument('--maxedges', type=int, help='maximum number of unique edges in examples')
@@ -70,6 +119,20 @@ def reduceedges(subgraph, cycles):
         return trimmed
     else:
         return subgraph
+
+def createimage(graph, filename, logo_func):
+    if args.logo:
+        logo = logo_func()
+        logo_w, logo_h = logo.size
+        main_ag = rendergraph.graphvizify(graph, in_place=True)
+        main = Image.open(io.BytesIO(main_ag.draw(format='png')))
+        main_w, main_h = main.size
+        merged = Image.new('RGB', (logo_w + main_w, main_h), 'white')
+        merged.paste(logo, None)
+        merged.paste(main, (logo_w, 0))
+        merged.save(filename)
+    else:
+        rendergraph.rendergraph(graph, filename, in_place=True)
 
 cycles = None
 if args.maxnodes is None:
@@ -119,9 +182,11 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                 if args.images:
                     red, blue = (chosen_cycles[1][0], chosen_cycles[0][0]) if chosen_cycles[0][1] else (chosen_cycles[0][0], chosen_cycles[1][0])
                     colored = colorsubgraph(subgraph, red, [], blue)
-                    for n in cycle_sets[0].intersection(cycle_sets[1]):
+                    shared_nodes = cycle_sets[0].intersection(cycle_sets[1])
+                    for n in shared_nodes:
                         colored.nodes[n]['penwidth'] = 2.0
-                    rendergraph.rendergraph(colored, args.images.format(fpnp, 'fpnp', len(colored.edges)), in_place=True)
+                    logo_func = lambda: logo_fpnp([subgraph.nodes[n]['name'] for n in shared_nodes])
+                    createimage(colored, args.images.format(fpnp, 'fpnp', len(colored.edges)), logo_func)
     if len(cycles) < 3 or not (shouldcheck3fused() or shouldcheckbridged()):
         continue
     pick_results = pickcycles(3)
@@ -159,7 +224,8 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                 colored = colorsubgraph(subgraph, *[cycle for cycle, sign in chosen_cycles])
                 for n in intersection:
                     colored.nodes[n]['penwidth'] = 2.0
-                rendergraph.rendergraph(colored, args.images.format(current_id, kind, len(colored.edges)), in_place=True)
+                logo_func = lambda: logo_3fused({subgraph.nodes[n]['name'] for n in intersection}, loop_signs)
+                createimage(colored, args.images.format(current_id, kind, len(colored.edges)), logo_func)
             continue
     if shouldcheckbridged():
         for connector_c, connector in enumerate(cycle_sets):
@@ -175,7 +241,7 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                         kind = 'type2'
                         type2 += 1
                         current_id = type2
-                        if misa < args.findmisa and ismutualinhibition(subgraph, chosen_cycles[connector_c][0], chosen_cycles[(connector_c + 1) % 3][0], chosen_cycles[(connector_c + 2) % 3][0]):
+                        if misa < args.findmisa and ismutualinhibition(subgraph, chosen_cycles[connector_c][0], other1, other2):
                             kind = 'type2misa'
                             misa += 1
                             current_id = misa
@@ -192,6 +258,13 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                     nx.write_graphml(subgraph, args.networks.format(current_id, kind))
                 if args.images:
                     colored = colorsubgraph(subgraph, chosen_cycles[(connector_c + 1) % 3][0], chosen_cycles[connector_c][0], chosen_cycles[(connector_c + 2) % 3][0])
-                    rendergraph.rendergraph(colored, args.images.format(current_id, kind, len(colored.edges)), in_place=True)
+                    def logo_func():
+                        other1_names = [subgraph.nodes[n]['name'] for n in connector.intersection(other1)]
+                        other2_names = [subgraph.nodes[n]['name'] for n in connector.intersection(other2)]
+                        positivities = [loop_signs[(connector_c + 1) % 3], loop_signs[connector_c], loop_signs[(connector_c + 2) % 3]]
+                        positive12 = not ishalfinhibition(subgraph, chosen_cycles[connector_c][0], other1, other2)
+                        positive21 = not ishalfinhibition(subgraph, chosen_cycles[connector_c][0], other2, other1)
+                        return logo_2bridged(other1_names, other2_names, positivities, positive12, positive21)
+                    createimage(colored, args.images.format(current_id, kind, len(colored.edges)), logo_func)
                 break
     

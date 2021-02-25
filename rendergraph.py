@@ -2,6 +2,10 @@ import networkx as nx
 from networkx.drawing.nx_agraph import to_agraph
 
 def rendergraph(graph, filename, in_place=False):
+    ag = graphvizify(graph, in_place=in_place)
+    ag.draw(filename)
+
+def graphvizify(graph, in_place=False, layout='dot'):
     if not in_place:
         graph = graph.copy()
     for n in graph.nodes:
@@ -11,8 +15,9 @@ def rendergraph(graph, filename, in_place=False):
         if (edge['repress']):
             edge['arrowhead'] = 'tee'
     ag = to_agraph(graph)
-    ag.layout('dot')
-    ag.draw(filename)
+    if layout is not None:
+        ag.layout(layout)
+    return ag
 
 def colorcycle(graph, cycle, color, mix_color):
     for i in range(len(cycle)):
