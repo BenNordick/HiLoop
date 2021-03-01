@@ -264,6 +264,7 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
                     matrix = np.vstack((matrix, caricature))
                     unique_fingerprints = np.vstack((unique_fingerprints, fingerprint))
                     row_redundancies.append(1)
+    plt.rc('font', size=18)
     gene_dendrogram_ratio = 0.1 if bicluster else 0
     cg = sns.clustermap(matrix, col_cluster=bicluster, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, gene_dendrogram_ratio), xticklabels=gene_names, yticklabels=False, cmap='seismic')
     matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
