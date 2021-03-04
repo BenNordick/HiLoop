@@ -1,4 +1,5 @@
 import argparse
+from countmotifs import hasrepression
 from identityholder import IdentityHolder
 import liuwangcycles
 from minimumtopologies import ispositive, ismutualinhibition
@@ -26,17 +27,31 @@ def findconnector(cycle_sets):
     return None
 
 def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
-    cycles = [(frozenset(cycle), ispositive(graph, cycle), cycle) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
+    cycles = [(frozenset(cycle), ispositive(graph, cycle), cycle, hasrepression(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
     pfls = len([0 for cycle in cycles if cycle[1]])
     pfl_ratio = pfls / len(cycles) if len(cycles) > 0 else 0.0
-    if len(cycles) < 3:
-        return pfls, pfl_ratio, 0, 0, 0, 0
-    fused3, bridged2, type1, type2, misa, excitable = 0, 0, 0, 0, 0, 0
+    if len(cycles) < 2:
+        return pfls, pfl_ratio, 0, 0, 0, 0, 0, 0, 0
+    fused3, bridged2, fusedpfls, type1, type2, misa, excitable, minimisa, fpnp = 0, 0, 0, 0, 0, 0, 0, 0, 0
+    sample_size = min(3, len(cycles))
     for _ in range(samples):
-        chosen = random.sample(cycles, 3)
+        chosen = random.sample(cycles, sample_size)
         chosen_cycles = [entry[0] for entry in chosen]
         if max_motif_size:
-            all_nodes = chosen_cycles[0].union(chosen_cycles[1]).union(chosen_cycles[2])
+            cycle_pair_nodes = chosen_cycles[0].union(chosen_cycles[1])
+            if len(cycle_pair_nodes) > max_motif_size:
+                continue
+        if isfused(chosen_cycles[:2]):
+            if chosen[0][1] and chosen[1][1]:
+                fusedpfls += 1
+                if chosen[0][3] or chosen[0][3]:
+                    minimisa += 1
+            elif chosen[0][1] != chosen[1][1]:
+                fpnp += 1
+        if sample_size < 3:
+            continue
+        if max_motif_size:
+            all_nodes = cycle_pair_nodes.union(chosen_cycles[2])
             if len(all_nodes) > max_motif_size:
                 continue
         all_positive = all(entry[1] for entry in chosen)
@@ -57,11 +72,13 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     sample3_adjustment = comb(len(cycles), 3) / samples
     type1_est = type1 * sample3_adjustment
     type2_est = type2 * sample3_adjustment
-    return pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, excitable * sample3_adjustment, type1 / fused3, type2 / bridged2
+    sample2_adjustment = comb(len(cycles), 2) / samples
+    return (pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, excitable * sample3_adjustment, type1 / fused3, type2 / bridged2,
+            fpnp * sample2_adjustment, minimisa * sample2_adjustment, minimisa / fusedpfls)
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, fixed_sign_sources=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
-    base_results = [0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, Excite, T1/F3, F2/Brdg
+    base_results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, Excite, T1/F3, F2/Brdg, FPNP, uMISA, uMISA/F
     for _ in range(base_trials):
         feasible_base_subgraph = graph if max_nodes_for_sample is None else permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
         for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size, max_cycle_length)):
@@ -101,7 +118,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
     empirical_cdfs, p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
-    column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'Excite', 'T1/Fus3', 'T2/Brdg']
-    print('\tFracLE\tp')
+    column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'Excite', 'T1/Fus3', 'T2/Brdg', 'FPNP', 'uMISA', 'uMISA/F']
+    print('\tFracLE')
     for i, column in enumerate(column_names):
-        print(column, empirical_cdfs[i], p_values[i], sep='\t')
+        print(column, empirical_cdfs[i], sep='\t')

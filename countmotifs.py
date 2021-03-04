@@ -12,7 +12,8 @@ launched_specifically = False
 def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=False):
     if launched_specifically:
         print('Finding cycles')
-    cycle_sets = [IdentityHolder(frozenset(cycle), (cycle, ispositive(network, cycle))) for cycle in liuwangcycles.generatecycles(network, max_cycle_length) if check_nfl or ispositive(network, cycle)]
+    cycle_sets = [IdentityHolder(frozenset(cycle), (cycle, ispositive(network, cycle), hasrepression(network, cycle))) for
+                  cycle in liuwangcycles.generatecycles(network, max_cycle_length) if check_nfl or ispositive(network, cycle)]
     cycle_edge_sets = dict()
     for holder in cycle_sets:
         cycle = holder.tag[0]
@@ -94,17 +95,19 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                 type1 += 1
             else:
                 excitable += 1
-    if launched_specifically and check_nfl:
-        print('Searching for fused PFL-NFL pairs')
+    if launched_specifically:
+        print('Checking fused pairs')
+    minimisa = 0
     fpnp = 0
-    if check_nfl:
-        for holder1, holder2 in cycle_graph.edges:
-            if holder1.tag[1] != holder2.tag[1]:
-                if max_motif_size:
-                    all_nodes = holder1.value.union(holder2.value)
-                    if len(all_nodes) > max_motif_size:
-                        continue
-                fpnp += 1
+    for holder1, holder2 in cycle_graph.edges:
+        if max_motif_size:
+            all_nodes = holder1.value.union(holder2.value)
+            if len(all_nodes) > max_motif_size:
+                continue
+        if holder1.tag[1] and holder2.tag[1] and (holder1.tag[2] or holder2.tag[2]):
+            minimisa += 1
+        elif check_nfl and holder1.tag[1] != holder2.tag[1]:
+            fpnp += 1
     if launched_specifically:
         print('Searching for Type II and MISA motifs')
     checked = 0
@@ -134,7 +137,10 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             checked += 1
             print(f'{checked}\r', end='')
     pfls = sum(1 for holder in cycle_sets if holder.tag[1])
-    return (pfls, type1, type2, misa, excitable, fpnp)
+    return (pfls, type1, type2, misa, minimisa, excitable, fpnp)
+
+def hasrepression(graph, cycle):
+    return any(graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]['repress'] for i in range(len(cycle)))
 
 def findtriangles(graph):
     checked = 0
@@ -157,7 +163,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
     result = countmotifs(graph, args.maxcycle, args.maxnodes, args.checknfl)
-    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], sep='\t')
+    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], '\nuMISA', result[4], sep='\t')
     if args.checknfl:
-        print('Excit', result[4], '\nFuse+-', result[5], sep='\t')
+        print('Excit', result[5], '\nFuse+-', result[6], sep='\t')
     
