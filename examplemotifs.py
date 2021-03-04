@@ -1,7 +1,7 @@
 import argparse
 import io
 import liuwangcycles
-from minimumtopologies import ispositive, ismutualinhibition, ishalfinhibition
+from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
 import permutenetwork
 from PIL import Image
@@ -248,13 +248,17 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                 current_id = None
                 if all(loop_signs):
                     if type2 < args.find2 or misa < args.findmisa:
+                        is_misa = ismutualinhibition(subgraph, chosen_cycles[connector_c][0], other1, other2)
                         kind = 'type2'
                         type2 += 1
                         current_id = type2
-                        if misa < args.findmisa and ismutualinhibition(subgraph, chosen_cycles[connector_c][0], other1, other2):
-                            kind = 'type2misa'
-                            misa += 1
-                            current_id = misa
+                        if misa < args.findmisa:
+                            if is_misa:
+                                kind = 'type2misa'
+                                misa += 1
+                                current_id = misa
+                            elif args.find2 == 0:
+                                kind = None
                 elif not any(loop_signs):
                     if negative2 < args.findnegative2:
                         kind = 'negative2'
@@ -269,12 +273,32 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                 if args.images:
                     colored = colorsubgraph(subgraph, chosen_cycles[(connector_c + 1) % 3][0], chosen_cycles[connector_c][0], chosen_cycles[(connector_c + 2) % 3][0])
                     def logo_func():
-                        other1_names = [subgraph.nodes[n]['name'] for n in connector.intersection(other1)]
-                        other2_names = [subgraph.nodes[n]['name'] for n in connector.intersection(other2)]
+                        connector_cycle = chosen_cycles[connector_c][0]
+                        cc_len = len(connector_cycle)
+                        i = 0
+                        while not (connector_cycle[i] in other1 and connector_cycle[(i + 1) % cc_len] not in other1):
+                            i += 1
+                        cycle1_rep = subgraph.nodes[connector_cycle[i % cc_len]]['name']
+                        positive12 = True
+                        hit_c2 = False
+                        while True:
+                            positive12 ^= subgraph.edges[connector_cycle[i % cc_len], connector_cycle[(i + 1) % cc_len]]['repress']
+                            next_in_c2 = connector_cycle[(i + 1) % cc_len] in other2
+                            i += 1
+                            if hit_c2 and not next_in_c2:
+                                if is_misa:
+                                    raise AssertionError('Could not find mutual repression for MISA example')
+                                i -= 1 # For Type II, go back into the other cycle and accept the quasi-MISA
+                                break
+                            if next_in_c2:
+                                hit_c2 = True
+                                if loop_signs[connector_c] and positive12 == is_misa:
+                                    continue
+                                break
+                        cycle2_rep = subgraph.nodes[connector_cycle[i % cc_len]]['name']
+                        positive21 = positive12 ^ (not loop_signs[connector_c])
                         positivities = [loop_signs[(connector_c + 1) % 3], loop_signs[connector_c], loop_signs[(connector_c + 2) % 3]]
-                        positive12 = not ishalfinhibition(subgraph, chosen_cycles[connector_c][0], other1, other2)
-                        positive21 = not ishalfinhibition(subgraph, chosen_cycles[connector_c][0], other2, other1)
-                        return logo_2bridged(other1_names, other2_names, positivities, positive12, positive21)
+                        return logo_2bridged([cycle1_rep], [cycle2_rep], positivities, positive12, positive21)
                     createimage(colored, args.images.format(current_id, kind, len(colored.edges)), logo_func)
                 break
     

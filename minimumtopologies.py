@@ -101,14 +101,3 @@ def ismutualinhibition(graph, connector_cycle, cycle1, cycle2):
         repress ^= graph.edges[connector_cycle[i % cc_len], connector_cycle[(i + 1) % cc_len]]['repress']
         i += 1
     return repress
-
-def ishalfinhibition(graph, connector_cycle, source_cycle, target_cycle):
-    cc_len = len(connector_cycle)
-    i = 0
-    while not (connector_cycle[i] in source_cycle and connector_cycle[(i + 1) % cc_len] not in source_cycle):
-        i += 1
-    repress = False
-    while connector_cycle[i % cc_len] not in target_cycle:
-        repress ^= graph.edges[connector_cycle[i % cc_len], connector_cycle[(i + 1) % cc_len]]['repress']
-        i += 1
-    return repress
