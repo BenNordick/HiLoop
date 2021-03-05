@@ -19,9 +19,14 @@ def graphvizify(graph, in_place=False, layout='dot'):
         ag.layout(layout)
     return ag
 
+def highlightedge(edge_attrs):
+    edge_attrs['penwidth'] = 2.0
+    edge_attrs['arrowsize'] = 1.2
+
 def colorcycle(graph, cycle, color, mix_color):
     for i in range(len(cycle)):
         edge = graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]
+        highlightedge(edge)
         if 'color' in edge:
             if isinstance(mix_color, dict):
                 edge['color'] = mix_color[edge['color']]
@@ -44,12 +49,12 @@ def colorcycles(graph, cycles):
             dst = cycle[(i + 1) % len(cycle)]
             if (src, dst) in colored_edges:
                 route = multigraph.add_edge(src, dst, **graph.edges[src, dst])
-                multigraph.edges[src, dst, route]['color'] = color
-                multigraph.edges[src, dst, route]['style'] = style
             else:
-                multigraph.edges[src, dst, 0]['color'] = color
-                multigraph.edges[src, dst, 0]['style'] = style
+                route = 0
                 colored_edges.add((src, dst))
+            multigraph.edges[src, dst, route]['color'] = color
+            multigraph.edges[src, dst, route]['style'] = style
+            highlightedge(multigraph.edges[src, dst, route])
     return multigraph
 
 def colorneighborhood(graph, start_node, colors, color_last_edges=True):

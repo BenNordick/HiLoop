@@ -14,7 +14,7 @@ def colorsubgraph(graph, r, y, b):
         if len(cycle) == 0:
             return 'solid'
         return 'solid' if ispositive(graph, cycle) else 'dashed'
-    return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))])
+    return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold2', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))])
 
 def logobase(**kwargs):
     ag = pygraphviz.AGraph(bgcolor='#D0D0D0', strict=False, directed=True, ranksep=0.3, **kwargs)
