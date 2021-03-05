@@ -6,6 +6,7 @@ import matplotlib.colors as mplcolors
 import matplotlib.lines as mplline
 import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mpltick
 import numpy as np
 import random
 import seaborn as sns
@@ -91,7 +92,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets='none', filter_attractors=None, filter_correlated_species=None, downsample=None):
+def plotattractors(report, reduction, connect_psets=False, filter_attractors=None, filter_correlated_species=None, downsample=None):
     reduction.prepare(report)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -107,9 +108,8 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
         else:
             filtered_psets.extend(occurrences)
     xlabel, ylabel = reduction.labels()
-    ax_main = None
-    if connect_psets == 'line':
-        fig, ax_main = plt.subplots()
+    fig, ax_main = plt.subplots()
+    if connect_psets:
         for pset in filtered_psets:
             pset_matrix = np.array(caricatureattractors(pset['attractors']))
             pset_xy = reduction.reduce(pset_matrix)
@@ -130,26 +130,14 @@ def plotattractors(report, reduction, connect_psets='none', filter_attractors=No
         cmap = copy.copy(plt.get_cmap('viridis'))
         cmap.set_under('white', 1.0)
         hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap}
-        if connect_psets == 'arc':
-            fig = plt.figure()
-            grid = fig.add_gridspec(nrows=1, ncols=2, width_ratios=(6, 1), wspace=0.05)
-            ax_main = fig.add_subplot(grid[0, 0])
-            ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
-            ax_arcs = fig.add_subplot(grid[0, 1], sharey=ax_main)
-            ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
-            color_cycle = ax_arcs._get_lines.prop_cycler
-            for pset in filtered_psets:
-                pset_matrix = np.array(pset['attractors'])
-                pset_xy = reduction.reduce(pset_matrix)
-                sorted_ys = sorted(pset_xy[:, 1])
-                height = random.uniform(0.2, 1.8)
-                color = next(color_cycle)['color']
-                for i in range(len(sorted_ys) - 1):
-                    a, b = sorted_ys[i:(i + 2)]
-                    ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.5))
-        else:
-            fig, ax_main = plt.subplots()
-            ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
+        ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
+    ax_main.axis('equal')
+    if reduction.zerobased('x'):
+        ax_main.set_xlim(left=0)
+    if reduction.zerobased('y'):
+        ax_main.set_ylim(bottom=0)
+    ax_main.xaxis.set_major_locator(mpltick.MultipleLocator(base=0.5))
+    ax_main.yaxis.set_major_locator(mpltick.MultipleLocator(base=0.5))
     ax_main.set_xlabel(xlabel)
     ax_main.set_ylabel(ylabel)
 
@@ -172,6 +160,8 @@ class PCA2D():
         return self.pca.transform(matrix)
     def labels(self):
         return 'PC1', 'PC2'
+    def zerobased(self, axis):
+        return False
 
 class AverageLog():
     def __init__(self, settings=None):
@@ -188,6 +178,8 @@ class AverageLog():
         return np.stack((self._componentwisereduce(matrix, self.x_components), self._componentwisereduce(matrix, self.y_components)), 1)
     def labels(self):
         return ', '.join((self._componentname(c) for c in self.x_components)), ', '.join((self._componentname(c) for c in self.y_components))
+    def zerobased(self, axis):
+        return len(self.x_components if axis == 'x' else self.y_components) == 1
     def _parsecomponent(self, report, text):
         if text.startswith('-'):
             text = text[1:]
@@ -335,7 +327,7 @@ if __name__ == "__main__":
     scatterplot_parser = subcmds.add_parser('scatterplot')
     scatterplot_parser.add_argument('--attractors', type=int, help='filter parameter sets by number of attractors')
     scatterplot_parser.add_argument('--correlated', type=int, help='filter parameter sets by number of monotonically correlated species')
-    scatterplot_parser.add_argument('--connect', choices=['none', 'line', 'arc'], default='none', help='how to connect attractors from the same parameter set')
+    scatterplot_parser.add_argument('--line', action='store_true', help='connect attractors from the same parameter set')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
     scatterplot_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
     heatmap_parser = subcmds.add_parser('heatmap')
@@ -351,7 +343,7 @@ if __name__ == "__main__":
         plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
-        plotattractors(report, reduction, connect_psets=args.connect, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample))
+        plotattractors(report, reduction, connect_psets=args.line, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample))
     elif args.command == 'heatmap':
         plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=150)
