@@ -5,6 +5,7 @@ import liuwangcycles
 from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
 import numpy as np
+import pandas as pd
 import permutenetwork
 import random
 from scipy.special import comb
@@ -27,9 +28,11 @@ def findconnector(cycle_sets):
     return None
 
 def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
+    def safediv(a, b):
+        return a / b if b != 0 else 0.0
     cycles = [(frozenset(cycle), ispositive(graph, cycle), cycle, hasrepression(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
     pfls = len([0 for cycle in cycles if cycle[1]])
-    pfl_ratio = pfls / len(cycles) if len(cycles) > 0 else 0.0
+    pfl_ratio = safediv(pfls, len(cycles))
     if len(cycles) < 2:
         return pfls, pfl_ratio, 0, 0, 0, 0, 0, 0, 0
     fused3, bridged2, fusedpfls, type1, type2, misa, excitable, minimisa, fpnp = 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -73,8 +76,8 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     type1_est = type1 * sample3_adjustment
     type2_est = type2 * sample3_adjustment
     sample2_adjustment = comb(len(cycles), 2) / samples
-    return (pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, excitable * sample3_adjustment, type1 / fused3, type2 / bridged2,
-            fpnp * sample2_adjustment, minimisa * sample2_adjustment, minimisa / fusedpfls)
+    return (pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, excitable * sample3_adjustment, safediv(type1, fused3), safediv(type2, bridged2),
+            fpnp * sample2_adjustment, minimisa * sample2_adjustment, safediv(minimisa, fusedpfls))
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, fixed_sign_sources=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
@@ -102,7 +105,7 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
         empirical_cdfs.append(extreme_counts / permutations)
         t, p = scipy.stats.ttest_1samp(permutation_results[component], value)
         p_values.append(p)
-    return empirical_cdfs, p_values
+    return empirical_cdfs, p_values, permutation_results, base_results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -115,10 +118,19 @@ if __name__ == "__main__":
     parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
     parser.add_argument('--maxmotifsize', type=int, help='maximum number of nodes in a motif')
     parser.add_argument('--fixedsign', type=str, help='regex matching nodes whose source regulations to preserve signs of')
+    parser.add_argument('--saveraw', type=str, help='CSV file to save raw sample results in')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    empirical_cdfs, p_values = evaluate(graph, args.permutations, args.samples, args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
+    empirical_cdfs, p_values, raw_results, base_results = evaluate(graph, args.permutations, args.samples, 
+                                                                   args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
     column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'Excite', 'T1/Fus3', 'T2/Brdg', 'FPNP', 'uMISA', 'uMISA/F']
     print('\tFracLE')
     for i, column in enumerate(column_names):
         print(column, empirical_cdfs[i], sep='\t')
+    if args.saveraw:
+        arr = np.transpose(np.array(raw_results))
+        arr = np.vstack((np.array(base_results), arr))
+        df = pd.DataFrame(arr, columns=column_names)
+        df['IsBase'] = False
+        df.loc[0, 'IsBase'] = True
+        df.to_csv(args.saveraw, index=False)
