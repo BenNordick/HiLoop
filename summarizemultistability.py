@@ -7,6 +7,7 @@ import matplotlib.lines as mplline
 import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mpltick
+import mpl_toolkits.axes_grid1.inset_locator as mptinset
 import numpy as np
 import random
 import seaborn as sns
@@ -308,10 +309,12 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
         reordered_redundancies = np.zeros((matrix.shape[0], 1))
         for i, redundancy in enumerate(row_redundancies):
             reordered_redundancies[matrix_display_ind[i], 0] = redundancy
-        ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
+        mesh = ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
         ax_redundancy.tick_params(labelbottom=False, labelleft=False, bottom=False)
         for spine in ['top', 'left', 'bottom']:
             ax_redundancy.spines[spine].set_visible(False)
+        ax_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='20%', loc='lower left')
+        cg.fig.colorbar(mesh, cax=ax_cbar)
 
 def parse_downsample(arg):
     return {int(n): float(p) for n, p in [part.split(':') for part in arg.split(',')]} if arg else None
