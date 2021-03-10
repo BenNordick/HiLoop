@@ -93,7 +93,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, filter_attractors=None, filter_correlated_species=None, downsample=None):
+def plotattractors(report, reduction, connect_psets=False, filter_attractors=None, filter_correlated_species=None, downsample=None, square=False):
     reduction.prepare(report)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -132,7 +132,7 @@ def plotattractors(report, reduction, connect_psets=False, filter_attractors=Non
         cmap.set_under('white', 1.0)
         hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap}
         ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
-    ax_main.axis('equal')
+    ax_main.axis('square' if square else 'equal')
     if reduction.zerobased('x'):
         ax_main.set_xlim(left=0)
     if reduction.zerobased('y'):
@@ -333,6 +333,7 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--line', action='store_true', help='connect attractors from the same parameter set')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
     scatterplot_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
+    scatterplot_parser.add_argument('--square', action='store_true', help='always use square axes')
     heatmap_parser = subcmds.add_parser('heatmap')
     heatmap_parser.add_argument('--arc', action='store_true', help='join multiattractor types with arcs')
     heatmap_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
@@ -346,7 +347,8 @@ if __name__ == "__main__":
         plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
-        plotattractors(report, reduction, connect_psets=args.line, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample))
+        square = args.square or (args.reduction == 'pca')
+        plotattractors(report, reduction, connect_psets=args.line, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample), square=square)
     elif args.command == 'heatmap':
         plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=150)
