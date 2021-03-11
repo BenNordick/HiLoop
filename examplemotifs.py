@@ -21,17 +21,12 @@ def logobase(**kwargs):
     ag.edge_attr['arrowsize'] = 0.8
     return ag
 
-def logoimage(ag):
-    ag.layout('dot')
-    png_bytes = ag.draw(format='png')
-    return Image.open(io.BytesIO(png_bytes))
-
 def logo_fpnp(fusion_nodes):
     ag = logobase()
     ag.add_node('X', label=',\n'.join(fusion_nodes), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
     ag.add_edge('X', 'X', 0, color='red', style='dashed', arrowhead='tee', headport='ne', tailport='se')
     ag.add_edge('X', 'X', 1, color='blue', headport='sw', tailport='nw')
-    return logoimage(ag)
+    return ag
 
 def logo_3fused(fusion_nodes, positivities):
     styles = [('solid' if positive else 'dashed') for positive in positivities]
@@ -47,7 +42,7 @@ def logo_3fused(fusion_nodes, positivities):
     ag.add_node('L2', shape='point', width=0.001, color='gold')
     ag.add_edge('X', 'L2', arrowhead='none', color='gold', style=styles[1])
     ag.add_edge('L2', 'X', arrowhead=tips[1], color='gold', style=styles[1])
-    return logoimage(ag)
+    return ag
 
 def logo_2bridged(fusion1, fusion2, positivities, half12_positive, half21_positive):
     styles = [('solid' if positive else 'dashed') for positive in positivities]
@@ -59,7 +54,7 @@ def logo_2bridged(fusion1, fusion2, positivities, half12_positive, half21_positi
     ag.add_edge('C1', 'C2', color='gold', style=styles[1], arrowhead=('normal' if half12_positive else 'tee'))
     ag.add_edge('C2', 'C1', color='gold', style=styles[1], arrowhead=('normal' if half21_positive else 'tee'))
     ag.add_edge('C2', 'C2', color='blue', style=styles[2], arrowhead=tips[2])
-    return logoimage(ag)
+    return ag
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='input GraphML file')
@@ -70,7 +65,8 @@ parser.add_argument('-m', '--findmisa', type=int, default=0, help='how many MISA
 parser.add_argument('--findnegative1', type=int, default=0, help='how many negative Type I examples to find')
 parser.add_argument('--findnegative2', type=int, default=0, help='how many negative Type II examples to find')
 parser.add_argument('-p', '--findfpnp', type=int, default=0, help='how many fused PFL/NFL pair examples to find')
-parser.add_argument('--images', type=str, help='output image file pattern {id, type, edges}')
+parser.add_argument('--images', nargs='+', type=str, help='output image file pattern {id, type, edges}')
+parser.add_argument('--dpi', type=float, default=96.0, help='DPI of output images')
 parser.add_argument('--logo', action='store_true', help='add motif summary/logo to saved images')
 parser.add_argument('--networks', type=str, help='output GraphML file pattern {id, type}')
 parser.add_argument('--printnodes', action='store_true', help='print distinct node names')
@@ -80,13 +76,22 @@ parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a c
 parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in common with an already selected subnetwork')
 parser.add_argument('--reduceedges', action='store_true', help='randomly drop some extra edges')
 parser.add_argument('--requirenodes', nargs='+', type=str, help='node(s) that must be present in the subnetwork')
+parser.add_argument('--usesubgraph', nargs='+', type=str, help='nodes whose induced subgraph to search')
 args = parser.parse_args()
+
+if args.images and args.logo and any(name.endswith('.svg') for name in args.images):
+    raise RuntimeError('Logos are not supported when rendering to SVG')
 
 graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
 type1, type2, excitable, misa, negative1, negative2, fpnp = 0, 0, 0, 0, 0, 0, 0
 seen = []
 seen_edgesets = []
 printed_nodes = set()
+
+if args.usesubgraph:
+    node_ids = {graph.nodes[n]['name']: n for n in graph.nodes}
+    used_ids = [node_ids[name] for name in args.usesubgraph]
+    graph = nx.relabel_nodes(graph.subgraph(used_ids), {key: i for i, key in enumerate(used_ids)})
 
 def shouldcheck3fused():
     return type1 < args.find1 or excitable < args.findexcitable or negative1 < args.findnegative1
@@ -120,12 +125,17 @@ def reduceedges(subgraph, cycles):
     else:
         return subgraph
 
-def createimage(graph, filename, logo_func):
+def createimage(graph, filename_placeholders, logo_func):
     if args.logo:
-        logo = logo_func()
+        logo_ag = logo_func()
+        logo_ag.graph_attr['dpi'] = args.dpi            
+        logo_ag.layout('dot')
+        logo_bytes = logo_ag.draw(format='png')
+        logo = Image.open(io.BytesIO(logo_bytes))
         logo_w, logo_h = logo.size
         main_ag = rendergraph.graphvizify(graph, in_place=True, layout=None)
-        main_ag.add_node('Logo', label='', shape='box', style='filled', color='#D0D0D0', width=(logo_w / 96), height=(logo_h / 96))
+        main_ag.graph_attr['dpi'] = args.dpi
+        main_ag.add_node('Logo', label='', shape='box', style='filled', color='#D0D0D0', width=(logo_w / args.dpi), height=(logo_h / args.dpi))
         main_ag.layout('dot')
         main = Image.open(io.BytesIO(main_ag.draw(format='png')))
         main_w, main_h = main.size
@@ -140,9 +150,12 @@ def createimage(graph, filename, logo_func):
                 break
         if not found_placeholder:
             print('Could not find logo placeholder')
-        main.save(filename)
+        for pattern in args.images:
+            main.save(pattern.format(*filename_placeholders))
     else:
-        rendergraph.rendergraph(graph, filename, in_place=True)
+        graph.graph['dpi'] = args.dpi
+        for pattern in args.images:
+            rendergraph.rendergraph(graph, pattern.format(*filename_placeholders), in_place=True)
 
 cycles = None
 if args.maxnodes is None:
@@ -172,8 +185,11 @@ def pickcycles(count):
     edges_set = set(subgraph.edges)
     if edges_set in seen_edgesets:
         return None
-    seen_edgesets.append(edges_set)
-    return chosen_cycles, cycle_sets, used_nodes, subgraph
+    def consume():
+        seen.append(used_nodes)
+        printnewnodes(used_nodes)
+        seen_edgesets.append(edges_set)
+    return chosen_cycles, cycle_sets, used_nodes, subgraph, consume
 
 while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
     if args.maxnodes is not None:
@@ -182,11 +198,10 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
     if fpnp < args.findfpnp:
         pick_results = pickcycles(2)
         if pick_results is not None:
-            chosen_cycles, cycle_sets, used_nodes, subgraph = pick_results
+            chosen_cycles, cycle_sets, used_nodes, subgraph, consume = pick_results
             if chosen_cycles[0][1] != chosen_cycles[1][1] and not cycle_sets[0].isdisjoint(cycle_sets[1]):
-                seen.append(used_nodes)
-                printnewnodes(used_nodes)
                 fpnp += 1
+                consume()
                 if args.networks:
                     nx.write_graphml(subgraph, args.networks.format(fpnp, 'fpnp'))
                 if args.images:
@@ -196,13 +211,13 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                     for n in shared_nodes:
                         colored.nodes[n]['penwidth'] = 2.0
                     logo_func = lambda: logo_fpnp([subgraph.nodes[n]['name'] for n in shared_nodes])
-                    createimage(colored, args.images.format(fpnp, 'fpnp', len(colored.edges)), logo_func)
+                    createimage(colored, (fpnp, 'fpnp', len(colored.edges)), logo_func)
     if len(cycles) < 3 or not (shouldcheck3fused() or shouldcheckbridged()):
         continue
     pick_results = pickcycles(3)
     if pick_results is None:
         continue
-    chosen_cycles, cycle_sets, used_nodes, subgraph = pick_results
+    chosen_cycles, cycle_sets, used_nodes, subgraph, consume = pick_results
     loop_signs = [positive for cycle, positive in chosen_cycles]
     if shouldcheck3fused():
         intersection = cycle_sets[0].intersection(cycle_sets[1]).intersection(cycle_sets[2])
@@ -226,8 +241,7 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                     current_id = excitable
             if kind is None:
                 continue
-            seen.append(used_nodes)
-            printnewnodes(used_nodes)
+            consume()
             if args.networks:
                 nx.write_graphml(subgraph, args.networks.format(current_id, kind))
             if args.images:
@@ -235,7 +249,7 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                 for n in intersection:
                     colored.nodes[n]['penwidth'] = 2.0
                 logo_func = lambda: logo_3fused({subgraph.nodes[n]['name'] for n in intersection}, loop_signs)
-                createimage(colored, args.images.format(current_id, kind, len(colored.edges)), logo_func)
+                createimage(colored, (current_id, kind, len(colored.edges)), logo_func)
             continue
     if shouldcheckbridged():
         for connector_c, connector in enumerate(cycle_sets):
@@ -266,8 +280,7 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                         current_id = negative2
                 if kind is None:
                     continue
-                seen.append(used_nodes)
-                printnewnodes(used_nodes)
+                consume()
                 if args.networks:
                     nx.write_graphml(subgraph, args.networks.format(current_id, kind))
                 if args.images:
@@ -299,6 +312,6 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
                         positive21 = positive12 ^ (not loop_signs[connector_c])
                         positivities = [loop_signs[(connector_c + 1) % 3], loop_signs[connector_c], loop_signs[(connector_c + 2) % 3]]
                         return logo_2bridged([cycle1_rep], [cycle2_rep], positivities, positive12, positive21)
-                    createimage(colored, args.images.format(current_id, kind, len(colored.edges)), logo_func)
+                    createimage(colored, (current_id, kind, len(colored.edges)), logo_func)
                 break
     
