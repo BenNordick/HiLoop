@@ -293,6 +293,12 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
             for spine in ['top', 'right', 'bottom']:
                 ax_arcs.spines[spine].set_visible(False)
     mesh = cg.ax_heatmap.collections[0]
+    max_orbit_len = 0
+    for pset in filtered_psets:
+        for attr in pset['attractors']:
+            if isoscillator(attr):
+                max_orbit_len = max(max_orbit_len, len(attr['orbit']))
+    orbit_render_len = max_orbit_len * osc_orbits
     for pset in filtered_psets:
         for index, attr in zip(pset['indexes'], pset['attractors']):
             if isoscillator(attr):
@@ -300,8 +306,8 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
                 orbit = np.array(attr['orbit'])
                 for x in range(orbit.shape[1]):
                     display_x = gene_display_ind[x]
-                    x_stops = np.linspace(display_x, display_x + 1, orbit.shape[0] * osc_orbits)
-                    color_stops = np.tile(np.vstack((orbit[:, x], orbit[:, x])), osc_orbits)
+                    x_stops = np.linspace(display_x, display_x + 1, orbit_render_len)
+                    color_stops = np.tile(np.vstack((orbit[:, x], orbit[:, x])), int(np.ceil(orbit_render_len / orbit.shape[0])))[:, :orbit_render_len]
                     cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
     if fold_dist is not None:
         ax_redundancy = cg.fig.add_subplot(new_gs[main_row, 1], sharey=cg.ax_heatmap)
