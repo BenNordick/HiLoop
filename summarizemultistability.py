@@ -204,7 +204,7 @@ class AverageLog():
         name = self.names[index]
         return prefix + (name[2:] if name.startswith('X_') else name)
 
-def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
+def plotheatmap(report, arcs=False, downsample=None, arc_downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -217,7 +217,24 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
             filtered_psets.extend(occurrences)
     if arcs:
         filtered_pset_types = categorizeattractors(filtered_psets)
-        dendrogram_ratio = 3 / (13 + 2 * len(filtered_pset_types))
+        if arc_downsample is not None:
+            arc_pset_types = dict()
+            for fpt, occurrences in filtered_pset_types.items():
+                if fpt in arc_downsample:
+                    if isinstance(arc_downsample[fpt], int):
+                        n_arcs = arc_downsample[fpt]
+                    else:
+                        percent = float(arc_downsample[fpt].split('%')[0])
+                        n_arcs = int(np.ceil(percent * len(occurrences) / 100))
+                    if n_arcs >= len(occurrences):
+                        arc_pset_types[fpt] = occurrences
+                    elif n_arcs > 0:
+                        arc_pset_types[fpt] = random.sample(occurrences, n_arcs)
+                else:
+                    arc_pset_types[fpt] = occurrences
+        else:
+            arc_pset_types = filtered_pset_types
+        dendrogram_ratio = 3 / (13 + 2 * len(arc_pset_types))
     else:
         dendrogram_ratio = 0.2
     matrix = None
@@ -265,7 +282,7 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
     heatmap_index = 1 if fold_dist is None else 2
     width_ratios = [2, 8]
     if arcs:
-        width_ratios = [3, 10] + [2] * len(filtered_pset_types)
+        width_ratios = [3, 10] + [2] * len(arc_pset_types)
     if fold_dist is not None:
         width_ratios.insert(1, width_ratios[1] * len(gene_names) * 0.01)
         width_ratios[2] -= width_ratios[1]
@@ -277,11 +294,11 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
     if bicluster:
         cg.ax_col_dendrogram.set_position(new_gs[0, heatmap_index].get_position(cg.fig))
     if arcs:
-        for fpt_id, summary in enumerate(sorted(filtered_pset_types.keys(), key=lambda am: am[0] * 100 + am[1], reverse=True)):
+        for fpt_id, summary in enumerate(sorted(arc_pset_types.keys(), key=lambda am: am[0] * 100 + am[1], reverse=True)):
             ax_arcs = cg.fig.add_subplot(new_gs[main_row, heatmap_index + 1 + fpt_id], sharey=cg.ax_heatmap)
             ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
             color_cycle = ax_arcs._get_lines.prop_cycler
-            for pset_id, pset in enumerate(filtered_pset_types[summary]):
+            for pset_id, pset in enumerate(arc_pset_types[summary]):
                 color = next(color_cycle)['color']
                 height = 1.75 - 0.2 * (pset_id % 8) + random.uniform(0, 0.1)
                 rows = sorted(matrix_display_ind[i] for i in pset['indexes'])
@@ -322,8 +339,17 @@ def plotheatmap(report, arcs=False, downsample=None, osc_orbits=1, fold_dist=Non
         ax_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='20%', loc='lower left')
         cg.fig.colorbar(mesh, cax=ax_cbar)
 
-def parse_downsample(arg):
-    return {int(n): float(p) for n, p in [part.split(':') for part in arg.split(',')]} if arg else None
+def parse_downsample(arg_list):
+    return {int(n): float(p) for n, p in [part.split(':') for part in arg_list]} if arg_list else None
+
+def parse_arc_downsample(arg_list):
+    def parse_one(arg):
+        column, downsample = arg.split(':')
+        if not downsample.endswith('%'):
+            downsample = int(downsample)
+        att, ms_rest = column.split('att')
+        return ((int(att), int(ms_rest.split('ms')[0])), downsample)
+    return dict(parse_one(arg) for arg in arg_list) if arg_list else None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -338,11 +364,11 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--correlated', type=int, help='filter parameter sets by number of monotonically correlated species')
     scatterplot_parser.add_argument('--line', action='store_true', help='connect attractors from the same parameter set')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
-    scatterplot_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
+    scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1')
     scatterplot_parser.add_argument('--square', action='store_true', help='always use square axes')
     heatmap_parser = subcmds.add_parser('heatmap')
-    heatmap_parser.add_argument('--arc', action='store_true', help='join multiattractor types with arcs')
-    heatmap_parser.add_argument('--downsample', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1,3:0.5')
+    heatmap_parser.add_argument('--arc', nargs='*', help='join multiattractor types with arcs (optional downsampling e.g. 3att4ms:10% or 4att2ms:5)')
+    heatmap_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1')
     heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
     heatmap_parser.add_argument('--fold', type=float, help='distance under which attractors will be combined into one heatmap row')
     heatmap_parser.add_argument('--bicluster', action='store_true', help='also cluster genes')
@@ -354,8 +380,10 @@ if __name__ == "__main__":
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, connect_psets=args.line, filter_attractors=args.attractors, filter_correlated_species=args.correlated, downsample=parse_downsample(args.downsample), square=square)
+        plotattractors(report, reduction, connect_psets=args.line, filter_attractors=args.attractors, filter_correlated_species=args.correlated, 
+                       downsample=parse_downsample(args.downsample), square=square)
     elif args.command == 'heatmap':
-        plotheatmap(report, arcs=args.arc, downsample=parse_downsample(args.downsample), osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
+        plotheatmap(report, arcs=(args.arc is not None), downsample=parse_downsample(args.downsample), arc_downsample=parse_arc_downsample(args.arc),
+                    osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=150)
     plt.close()
