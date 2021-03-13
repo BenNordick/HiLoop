@@ -2,9 +2,9 @@ import argparse
 import collections
 import copy
 import json
+import matplotlib.collections as mplcollect
 import matplotlib.colors as mplcolors
 import matplotlib.lines as mplline
-import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mpltick
 import mpl_toolkits.axes_grid1.inset_locator as mptinset
@@ -300,13 +300,17 @@ def plotheatmap(report, arcs=False, downsample=None, arc_downsample=None, osc_or
             color_cycle = ax_arcs._get_lines.prop_cycler
             for pset_id, pset in enumerate(arc_pset_types[summary]):
                 color = next(color_cycle)['color']
-                height = 1.75 - 0.2 * (pset_id % 8) + random.uniform(0, 0.1)
+                height = 1.85 - 1.6 * pset_id / len(arc_pset_types[summary])
+                steepness = 0.18 * (1 - (height - 0.35) / 1.6)
                 rows = sorted(matrix_display_ind[i] for i in pset['indexes'])
                 for i in range(len(rows) - 1):
                     a, b = rows[i:(i + 2)]
                     if a != b:
-                        ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2 + 0.5), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.7))
+                        segments = [[(0, a + 0.5), (height, a + 0.8 + steepness), (height, b + 0.2 - steepness), (0, b + 0.5)]]
+                        lc = mplcollect.LineCollection(segments, colors=color, linewidths=0.8)
+                        ax_arcs.add_collection(lc)
             ax_arcs.set_xlabel(f'{summary[0]} att.,\n{summary[1]} m.s.')
+            ax_arcs.set_xlim(0, 2)
             for spine in ['top', 'right', 'bottom']:
                 ax_arcs.spines[spine].set_visible(False)
     mesh = cg.ax_heatmap.collections[0]
