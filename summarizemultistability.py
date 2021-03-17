@@ -5,6 +5,7 @@ import json
 import matplotlib.collections as mplcollect
 import matplotlib.colors as mplcolors
 import matplotlib.lines as mplline
+import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mpltick
 import mpl_toolkits.axes_grid1.inset_locator as mptinset
@@ -204,7 +205,7 @@ class AverageLog():
         name = self.names[index]
         return prefix + (name[2:] if name.startswith('X_') else name)
 
-def plotheatmap(report, arcs=False, downsample=None, arc_downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
+def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     summary_occurrences = categorizeattractors(report)
     filtered_psets = []
@@ -299,18 +300,25 @@ def plotheatmap(report, arcs=False, downsample=None, arc_downsample=None, osc_or
             ax_arcs.tick_params(labelbottom=False, labelleft=False, bottom=False)
             color_cycle = ax_arcs._get_lines.prop_cycler
             for pset_id, pset in enumerate(arc_pset_types[summary]):
+                if arcs == 'straight':
+                    height = 1.85 - 1.6 * pset_id / len(arc_pset_types[summary])
+                    steepness = 0.18 * (1 - (height - 0.35) / 1.6)
+                else:
+                    height = 1.75 - 0.2 * (pset_id % 8) + random.uniform(0, 0.1)
                 color = next(color_cycle)['color']
-                height = 1.85 - 1.6 * pset_id / len(arc_pset_types[summary])
-                steepness = 0.18 * (1 - (height - 0.35) / 1.6)
                 rows = sorted(matrix_display_ind[i] for i in pset['indexes'])
                 for i in range(len(rows) - 1):
                     a, b = rows[i:(i + 2)]
                     if a != b:
-                        segments = [[(0, a + 0.5), (height, a + 0.8 + steepness), (height, b + 0.2 - steepness), (0, b + 0.5)]]
-                        lc = mplcollect.LineCollection(segments, colors=color, linewidths=0.8)
-                        ax_arcs.add_collection(lc)
+                        if arcs == 'straight':
+                            segments = [[(0, a + 0.5), (height, a + 0.8 + steepness), (height, b + 0.2 - steepness), (0, b + 0.5)]]
+                            lc = mplcollect.LineCollection(segments, colors=color, linewidths=0.8)
+                            ax_arcs.add_collection(lc)
+                        else:
+                            ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2 + 0.5), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.7))
             ax_arcs.set_xlabel(f'{summary[0]} att.,\n{summary[1]} m.s.')
-            ax_arcs.set_xlim(0, 2)
+            if arcs == 'straight':
+                ax_arcs.set_xlim(0, 2)
             for spine in ['top', 'right', 'bottom']:
                 ax_arcs.spines[spine].set_visible(False)
     mesh = cg.ax_heatmap.collections[0]
@@ -371,7 +379,8 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1')
     scatterplot_parser.add_argument('--square', action='store_true', help='always use square axes')
     heatmap_parser = subcmds.add_parser('heatmap')
-    heatmap_parser.add_argument('--arc', nargs='*', help='join multiattractor types with arcs (optional downsampling e.g. 3att4ms:10% or 4att2ms:5)')
+    heatmap_parser.add_argument('--connect', type=str, choices=['arc', 'straight'], help='connect attractors from the same parameter set')
+    heatmap_parser.add_argument('--connect-downsample', nargs='+', help='downsample connectors e.g. 3att4ms:10% or 4att2ms:5')
     heatmap_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified attractor count, e.g. 2:0.1')
     heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
     heatmap_parser.add_argument('--fold', type=float, help='distance under which attractors will be combined into one heatmap row')
@@ -387,7 +396,7 @@ if __name__ == "__main__":
         plotattractors(report, reduction, connect_psets=args.line, filter_attractors=args.attractors, filter_correlated_species=args.correlated, 
                        downsample=parse_downsample(args.downsample), square=square)
     elif args.command == 'heatmap':
-        plotheatmap(report, arcs=(args.arc is not None), downsample=parse_downsample(args.downsample), arc_downsample=parse_arc_downsample(args.arc),
+        plotheatmap(report, arcs=args.connect, downsample=parse_downsample(args.downsample), arc_downsample=parse_arc_downsample(args.connect_downsample),
                     osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=150)
     plt.close()
