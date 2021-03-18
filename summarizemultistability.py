@@ -112,20 +112,20 @@ def plotattractors(report, reduction, connect_psets=False, filter_attractors=Non
     xlabel, ylabel = reduction.labels()
     fig, ax_main = plt.subplots()
     if connect_psets:
-        for pset in filtered_psets:
+        for z, pset in enumerate(filtered_psets):
             pset_matrix = np.array(caricatureattractors(pset['attractors']))
             pset_xy = reduction.reduce(pset_matrix)
-            sorted_attractors = pset_xy[pset_xy[:, 0].argsort()]
-            line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1])
+            sorted_attractors = pset_xy[pset_matrix[:, 0].argsort(), :]
+            line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], zorder=z)
             pset_color = line[0].get_color()
             point_mask = [not isoscillator(a) for a in pset['attractors']]
-            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], color=pset_color)
+            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], color=pset_color, zorder=z)
             for osc in (a for a in pset['attractors'] if isoscillator(a)):
                 vertices = np.array(osc['orbit'])
                 projected_vertices = reduction.reduce(vertices)
                 if projected_vertices.shape[0] >= 3:
                     projected_vertices = np.vstack((projected_vertices, projected_vertices[0, :]))
-                polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=1.5, linestyle='--', fill=False)
+                polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=1.5, linestyle='--', fill=False, zorder=z)
                 ax_main.add_patch(polygon)
     else:
         points = reduction.reduce(psets_matrix(filtered_psets))
