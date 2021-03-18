@@ -258,13 +258,14 @@ def summaryhsl(all_summaries, summary):
     variability_squeeze = (2 if att_range > 1 else 1) * (2 if ms_range > 1 else 1)
     return hue, 1, colorsys.ONE_THIRD, bin_width / variability_squeeze
 
-def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
+def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = applydownsample(summary_occurrences, downsample)
+    filtered_pset_types = categorizeattractors(filtered_psets)
+    distinct_summaries = list(filtered_pset_types.keys())
     if arcs:
-        filtered_pset_types = categorizeattractors(filtered_psets)
         arc_pset_types = categorizeattractors(applydownsample(filtered_pset_types, arc_downsample)) if arc_downsample else filtered_pset_types
         dendrogram_ratio = 3 / (13 + 2 * len(arc_pset_types))
     else:
@@ -347,7 +348,12 @@ def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, osc_orb
                             ax_arcs.add_collection(lc)
                         else:
                             ax_arcs.add_patch(mplpatch.Arc((0, (a + b) / 2 + 0.5), height, b - a, 180.0, 90.0, 270.0, edgecolor=color, linewidth=0.7))
-            ax_arcs.set_xlabel(f'{summary[0]} att.,\n{summary[1]} m.s.')
+            if color_columns:
+                hue, sat, lum, hue_vary_width = summaryhsl(distinct_summaries, summary)
+                col_color = colorsys.hls_to_rgb(hue + hue_vary_width / 2, lum, sat)
+            else:
+                col_color = 'black'
+            ax_arcs.set_xlabel(f'{summary[0]} att.,\n{summary[1]} m.s.', color=col_color)
             if arcs == 'straight':
                 ax_arcs.set_xlim(0, 2)
             for spine in ['top', 'right', 'bottom']:
@@ -418,6 +424,7 @@ if __name__ == "__main__":
     heatmap_parser = subcmds.add_parser('heatmap')
     heatmap_parser.add_argument('--connect', type=str, choices=['arc', 'straight'], help='connect attractors from the same parameter set')
     heatmap_parser.add_argument('--connect-downsample', '--cds', nargs='+', help='downsample connectors e.g. 3att4ms:10% or 4att2ms:5')
+    heatmap_parser.add_argument('--color-coordinate', '--cc', action='store_true', help='coordinate connection column label colors with scatterplot focus')
     heatmap_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. e.g. 2:10% or 4att3ms:0')
     heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
     heatmap_parser.add_argument('--fold', type=float, help='distance under which attractors will be combined into one heatmap row')
@@ -434,6 +441,6 @@ if __name__ == "__main__":
         plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample), focus=focus, focus_osc=args.focus_osc, square=square)
     elif args.command == 'heatmap':
         plotheatmap(report, arcs=args.connect, downsample=parse_downsample(args.downsample), arc_downsample=parse_downsample(args.connect_downsample),
-                    osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
+                    color_columns=args.color_coordinate, osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=args.dpi)
     plt.close()
