@@ -144,7 +144,7 @@ def plotattractors(report, reduction, connect_psets=False, downsample=None, focu
             if focus or focus_osc:
                 summary = summarizeattractors(pset)
                 hue, sat, lum, hue_vary_width = summaryhsl(distinct_summaries, summary)
-                if (focus_osc and has_oscillator) or (downsample and specificrulevalue(focus, summary, default=False)):
+                if (focus_osc and has_oscillator) or (focus and specificrulevalue(focus, summary, default=False)):
                     hue += random.uniform(0, hue_vary_width)
                     sat *= random.uniform(0.8, 1.0)
                     lum *= random.uniform(0.85, 1.1)
