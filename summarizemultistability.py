@@ -1,5 +1,6 @@
 import argparse
 import collections
+import colorsys
 import copy
 import json
 import matplotlib.collections as mplcollect
@@ -57,23 +58,26 @@ def categorizeattractors(report):
         summary_occurrences[summarizeattractors(pset)].append(pset)
     return summary_occurrences
 
+def specificrulevalue(ruleset, summary, default=None):
+    specific = None
+    attractors, monotonic = summary
+    if summary in ruleset:
+        specific = summary
+    elif attractors in ruleset:
+        specific = attractors
+    return ruleset[specific] if specific in ruleset else default
+
 def applydownsample(summary_occurrences, downsample):
     filtered_psets = []
     for summary, occurrences in summary_occurrences.items():
-        attractors, monotonic = summary
         n_psets = None
         if downsample is not None:
-            specific = None
-            if summary in downsample:
-                specific = summary
-            elif attractors in downsample:
-                specific = attractors
-            if specific in downsample:
-                if isinstance(downsample[specific], int):
-                    n_psets = downsample[specific]
-                else:
-                    percent = float(downsample[specific].split('%')[0])
-                    n_psets = int(np.ceil(percent * len(occurrences) / 100))
+            limit_rule = specificrulevalue(downsample, summary, default=len(occurrences))
+            if isinstance(limit_rule, int):
+                n_psets = limit_rule
+            else:
+                percent = float(limit_rule.split('%')[0])
+                n_psets = int(np.ceil(percent * len(occurrences) / 100))
         if n_psets is None or n_psets >= len(occurrences):
             filtered_psets.extend(occurrences)
         else:
@@ -117,7 +121,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, downsample=None, square=False):
+def plotattractors(report, reduction, connect_psets=False, downsample=None, focus=None, focus_osc=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -125,20 +129,43 @@ def plotattractors(report, reduction, connect_psets=False, downsample=None, squa
     xlabel, ylabel = reduction.labels()
     fig, ax_main = plt.subplots()
     if connect_psets:
-        for z, pset in enumerate(filtered_psets):
+        distinct_summaries = list(categorizeattractors(filtered_psets).keys())
+        for i, pset in enumerate(filtered_psets):
             pset_matrix = np.array(caricatureattractors(pset['attractors']))
             pset_xy = reduction.reduce(pset_matrix)
             sorted_attractors = pset_xy[pset_matrix[:, 0].argsort(), :]
-            line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], zorder=z)
-            pset_color = line[0].get_color()
             point_mask = [not isoscillator(a) for a in pset['attractors']]
-            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], color=pset_color, zorder=z)
+            has_oscillator = not all(point_mask)
+            z = i
+            pset_color = None
+            linewidth = None
+            oscwidth = 1.5
+            dotsize = None
+            if focus or focus_osc:
+                summary = summarizeattractors(pset)
+                hue, sat, lum, hue_vary_width = summaryhsl(distinct_summaries, summary)
+                if (focus_osc and has_oscillator) or (downsample and specificrulevalue(focus, summary, default=False)):
+                    hue += random.uniform(0, hue_vary_width)
+                    sat *= random.uniform(0.8, 1.0)
+                    lum *= random.uniform(0.85, 1.1)
+                    z += len(filtered_psets)
+                else:
+                    linewidth = 0.8
+                    oscwidth = 1.1
+                    dotsize = 10.0
+                    lum = 1 - (1 - lum) * random.uniform(0.3, 0.5)
+                    sat *= random.uniform(0.35, 0.45)
+                    hue += random.uniform(0, hue_vary_width)
+                pset_color = colorsys.hls_to_rgb(hue, lum, sat)
+            line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], lw=linewidth, color=pset_color, zorder=z)
+            pset_color = line[0].get_color()
+            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], s=dotsize, color=pset_color, zorder=z)
             for osc in (a for a in pset['attractors'] if isoscillator(a)):
                 vertices = np.array(osc['orbit'])
                 projected_vertices = reduction.reduce(vertices)
                 if projected_vertices.shape[0] >= 3:
                     projected_vertices = np.vstack((projected_vertices, projected_vertices[0, :]))
-                polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=1.5, linestyle='--', fill=False, zorder=z)
+                polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=oscwidth, linestyle='--', fill=False, zorder=z)
                 ax_main.add_patch(polygon)
     else:
         points = reduction.reduce(psets_matrix(filtered_psets))
@@ -217,6 +244,19 @@ class AverageLog():
         prefix = '-' if factor < 0 else ''
         name = self.names[index]
         return prefix + (name[2:] if name.startswith('X_') else name)
+
+def summaryhsl(all_summaries, summary):
+    lowest_att = min(att for att, ms in all_summaries)
+    highest_att = max(att for att, ms in all_summaries)
+    att_range = highest_att - lowest_att + 1
+    attractors, monotonic_species = summary
+    lowest_ms = min(ms for att, ms in all_summaries if att == attractors)
+    highest_ms = max(ms for att, ms in all_summaries if att == attractors)
+    ms_range = highest_ms - lowest_ms + 1
+    bin_width = 1 / (ms_range + 1) / att_range
+    hue = ((highest_att - attractors) / att_range) + (highest_ms - monotonic_species) * bin_width
+    variability_squeeze = (2 if att_range > 1 else 1) * (2 if ms_range > 1 else 1)
+    return hue, 1, colorsys.ONE_THIRD, bin_width / variability_squeeze
 
 def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, osc_orbits=1, fold_dist=None, bicluster=False):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
@@ -363,14 +403,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('report', type=str, help='input JSON report filename')
     parser.add_argument('graph', type=str, help='output graph image filename')
+    parser.add_argument('--dpi', type=int, default=150, help='output bitmap image DPI')
     subcmds = parser.add_subparsers(dest='command', required=True, help='kind of graph to make')
     table_parser = subcmds.add_parser('table')
     table_parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
     table_parser.add_argument('--colorbar', action='store_true', help='show colorbar even when counts are displayed')
     scatterplot_parser = subcmds.add_parser('scatterplot')
     scatterplot_parser.add_argument('--line', action='store_true', help='connect attractors from the same parameter set')
-    scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 or "pca" to run PCA')
+    scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 (negatives allowed) or "pca" to run PCA')
     scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. 2:10% or 4att3ms:0')
+    scatterplot_parser.add_argument('--focus', nargs='*', type=str, help='type(s) of parameter sets to focus on, e.g. 3att4ms or 4')
+    scatterplot_parser.add_argument('--focus-osc', action='store_true', help='always focus parameter sets containing oscillations')
     scatterplot_parser.add_argument('--square', action='store_true', help='always use square axes')
     heatmap_parser = subcmds.add_parser('heatmap')
     heatmap_parser.add_argument('--connect', type=str, choices=['arc', 'straight'], help='connect attractors from the same parameter set')
@@ -386,10 +429,11 @@ if __name__ == "__main__":
         plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
+        focus = {parse_systemtype(spec): True for spec in args.focus} if args.focus else None
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample), square=square)
+        plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample), focus=focus, focus_osc=args.focus_osc, square=square)
     elif args.command == 'heatmap':
         plotheatmap(report, arcs=args.connect, downsample=parse_downsample(args.downsample), arc_downsample=parse_downsample(args.connect_downsample),
                     osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
-    plt.savefig(args.graph, dpi=150)
+    plt.savefig(args.graph, dpi=args.dpi)
     plt.close()
