@@ -121,7 +121,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, downsample=None, focus=None, focus_osc=False, square=False):
+def plotattractors(report, reduction, connect_psets=False, downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -137,26 +137,36 @@ def plotattractors(report, reduction, connect_psets=False, downsample=None, focu
             point_mask = [not isoscillator(a) for a in pset['attractors']]
             has_oscillator = not all(point_mask)
             z = i
-            pset_color = None
             linewidth = None
             oscwidth = 1.5
             dotsize = None
+            defocused = False
+            summary = summarizeattractors(pset)
             if focus or focus_osc:
-                summary = summarizeattractors(pset)
-                hue, sat, lum, hue_vary_width = summaryhsl(distinct_summaries, summary)
                 if (focus_osc and has_oscillator) or (focus and specificrulevalue(focus, summary, default=False)):
-                    hue += random.uniform(0, hue_vary_width)
-                    sat *= random.uniform(0.8, 1.0)
-                    lum *= random.uniform(0.85, 1.1)
                     z += len(filtered_psets)
                 else:
                     linewidth = 0.8
                     oscwidth = 1.1
                     dotsize = 10.0
-                    lum = 1 - (1 - lum) * random.uniform(0.3, 0.5)
-                    sat *= random.uniform(0.35, 0.45)
-                    hue += random.uniform(0, hue_vary_width)
+                    defocused = True
+            if color_code:
+                hue, sat, lum, hue_vary_width = summaryhsl(distinct_summaries, summary)
+                hue += random.uniform(0, hue_vary_width)
+                if not defocused:
+                    lum *= random.uniform(0.85, 1.1)
+                    sat *= random.uniform(0.8, 1.0)
+            elif defocused:
+                color_spec = ax_main._get_lines.get_next_color()
+                r, g, b = mplcolors.to_rgb(color_spec)
+                hue, sat, lum = colorsys.rgb_to_hls(r, g, b)
+            if defocused:
+                lum = 1 - (1 - lum) * random.uniform(0.3, 0.5)
+                sat *= random.uniform(0.35, 0.45)
+            if color_code or defocused:
                 pset_color = colorsys.hls_to_rgb(hue, lum, sat)
+            else:
+                pset_color = None
             line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], lw=linewidth, color=pset_color, zorder=z)
             pset_color = line[0].get_color()
             ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], s=dotsize, color=pset_color, zorder=z)
@@ -420,6 +430,7 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. 2:10% or 4att3ms:0')
     scatterplot_parser.add_argument('--focus', nargs='*', type=str, help='type(s) of parameter sets to focus on, e.g. 3att4ms or 4')
     scatterplot_parser.add_argument('--focus-osc', action='store_true', help='always focus parameter sets containing oscillations')
+    scatterplot_parser.add_argument('--color', '--cc', action='store_true', help='color lines by parameter set type')
     scatterplot_parser.add_argument('--square', action='store_true', help='always use square axes')
     heatmap_parser = subcmds.add_parser('heatmap')
     heatmap_parser.add_argument('--connect', type=str, choices=['arc', 'straight'], help='connect attractors from the same parameter set')
@@ -438,7 +449,8 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         focus = {parse_systemtype(spec): True for spec in args.focus} if args.focus else None
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample), focus=focus, focus_osc=args.focus_osc, square=square)
+        plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample),
+                      focus=focus, focus_osc=args.focus_osc, color_code=args.color, square=square)
     elif args.command == 'heatmap':
         plotheatmap(report, arcs=args.connect, downsample=parse_downsample(args.downsample), arc_downsample=parse_downsample(args.connect_downsample),
                     color_columns=args.color_coordinate, osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
