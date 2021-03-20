@@ -268,7 +268,7 @@ def summaryhsl(all_summaries, summary):
     variability_squeeze = (2 if att_range > 1 else 1) * (2 if ms_range > 1 else 1)
     return hue, 1, colorsys.ONE_THIRD, bin_width / variability_squeeze
 
-def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False):
+def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -391,13 +391,24 @@ def plotheatmap(report, arcs=None, downsample=None, arc_downsample=None, color_c
         reordered_redundancies = np.zeros((matrix.shape[0], 1))
         for i, redundancy in enumerate(row_redundancies):
             reordered_redundancies[matrix_display_ind[i], 0] = redundancy
-        mesh = ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
+        fold_mesh = ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
         ax_redundancy.tick_params(labelbottom=False, labelleft=False, bottom=False)
         for spine in ['top', 'left', 'bottom']:
             ax_redundancy.spines[spine].set_visible(False)
-        ax_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='20%', loc='lower left')
-        cg.fig.colorbar(mesh, cax=ax_cbar)
-
+        ax_fold_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='15%', loc='lower left')
+        cg.fig.colorbar(fold_mesh, cax=ax_fold_cbar, label='Instances')
+        ax_fold_cbar.yaxis.set_label_position('left')
+    if conc_colorbar:
+        if bicluster:
+            ax_corner = cg.fig.add_subplot(new_gs[0, 0])
+            ax_corner.axis('off')
+            ax_conc_cbar = mptinset.inset_axes(ax_corner, width='80%', height='25%', loc='center left')
+            cg.fig.colorbar(mesh, cax=ax_conc_cbar, orientation='horizontal', label='Conc.')
+            ax_conc_cbar.xaxis.set_label_position('top')
+        else:
+            ax_conc_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='15%', loc='upper left')
+            cg.fig.colorbar(mesh, cax=ax_conc_cbar, label='Conc.')
+            ax_conc_cbar.yaxis.set_label_position('left')
 def parse_systemtype(system_spec):
     if system_spec == 'else':
         return None
@@ -433,6 +444,7 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--color', '--cc', action='store_true', help='color lines by parameter set type')
     scatterplot_parser.add_argument('--square', action='store_true', help='always use square axes')
     heatmap_parser = subcmds.add_parser('heatmap')
+    heatmap_parser.add_argument('--colorbar', action='store_true', help='add colorbar for species concentrations')
     heatmap_parser.add_argument('--connect', type=str, choices=['arc', 'straight'], help='connect attractors from the same parameter set')
     heatmap_parser.add_argument('--connect-downsample', '--cds', nargs='+', help='downsample connectors e.g. 3att4ms:10% or 4att2ms:5')
     heatmap_parser.add_argument('--color-coordinate', '--cc', action='store_true', help='coordinate connection column label colors with scatterplot focus')
@@ -452,7 +464,8 @@ if __name__ == "__main__":
         plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample),
                       focus=focus, focus_osc=args.focus_osc, color_code=args.color, square=square)
     elif args.command == 'heatmap':
-        plotheatmap(report, arcs=args.connect, downsample=parse_downsample(args.downsample), arc_downsample=parse_downsample(args.connect_downsample),
-                    color_columns=args.color_coordinate, osc_orbits=args.orbits, fold_dist=args.fold, bicluster=args.bicluster)
+        plotheatmap(report, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
+                    arc_downsample=parse_downsample(args.connect_downsample), color_columns=args.color_coordinate, osc_orbits=args.orbits,
+                    fold_dist=args.fold, bicluster=args.bicluster)
     plt.savefig(args.graph, dpi=args.dpi)
     plt.close()
