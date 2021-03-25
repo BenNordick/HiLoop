@@ -12,6 +12,7 @@ import matplotlib.ticker as mpltick
 import mpl_toolkits.axes_grid1.inset_locator as mptinset
 import numpy as np
 import random
+import scipy.cluster as spcluster
 import seaborn as sns
 from sklearn import decomposition
 
@@ -20,11 +21,11 @@ def isoscillator(attractor):
     return isinstance(attractor, dict)
 
 def caricatureattractor(attractor):
-    '''Turn the given attractor information value (which might be an oscillation) into a single vector, for comparison.'''
+    '''Turn the given attractor information value (which might be an oscillation) into a single list, for comparison.'''
     if isoscillator(attractor):
         return [(s['max'] + s['min']) / 2 for s in attractor['species']]
     else:
-        return attractor
+        return list(attractor)
 
 def caricatureattractors(attractors):
     '''Caricature each species in the given attractor set (nested list).'''
@@ -85,7 +86,7 @@ def applydownsample(summary_occurrences, downsample):
     return filtered_psets
 
 def plotmultistability(report, label_counts=False, colorbar=True):
-    '''Set up a multistability heatmap in the current pyplot.'''
+    '''Set up a multistability table in the current pyplot.'''
     summary_occurrences = categorizeattractors(report)
     max_attractors = max(s[0] for s in summary_occurrences.keys())
     min_attractors = min(s[0] for s in summary_occurrences.keys())
@@ -268,7 +269,7 @@ def summaryhsl(all_summaries, summary):
     variability_squeeze = (2 if att_range > 1 else 1) * (2 if ms_range > 1 else 1)
     return hue, 1, colorsys.ONE_THIRD, bin_width / variability_squeeze
 
-def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False):
+def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False, osc_linkage=0):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -280,46 +281,53 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
         dendrogram_ratio = 3 / (13 + 2 * len(arc_pset_types))
     else:
         dendrogram_ratio = 0.2
-    matrix = None
+    detail_matrix = None
     unique_fingerprints = None
     row_redundancies = None
     for pset in filtered_psets:
         pset['indexes'] = []
         for attractor in pset['attractors']:
-            caricature = np.array(caricatureattractor(attractor))
-            if fold_dist is not None:
-                if isoscillator(attractor):
-                    fingerprint = [100]
-                    for species in attractor['species']:
-                        fingerprint.append(species['min'])
-                        fingerprint.append(species['max'])
-                else:
-                    fingerprint = [0]
-                    for conc in attractor:
-                        fingerprint.extend([conc, conc])
-                fingerprint = np.array(fingerprint)
-            if matrix is None:
-                matrix = np.vstack((caricature, ))
+            linkable = caricatureattractor(attractor)
+            if isoscillator(attractor):
+                linkable.append(osc_linkage)
+                fingerprint = [100]
+                orbit = np.array(attractor['orbit'])
+                for s, species in enumerate(attractor['species']):
+                    avg_speed = np.mean(np.abs(orbit[1:, s] - orbit[:-1, s])) / (orbit.shape[0] - 1)
+                    linkable.append(avg_speed)
+                    fingerprint.extend([species['min'], species['max'], avg_speed * osc_linkage])
+            else:
+                linkable.extend([0] * (len(gene_names) + 1))
+                fingerprint = [0]
+                for conc in attractor:
+                    fingerprint.extend([conc, conc, 0])
+            linkable = np.array(linkable)
+            fingerprint = np.array(fingerprint)
+            if detail_matrix is None:
+                detail_matrix = np.vstack((linkable, ))
                 if fold_dist is not None:
                     unique_fingerprints = np.vstack((fingerprint, ))
                     row_redundancies = [1]
                 pset['indexes'].append(0)
             elif fold_dist is None:
-                pset['indexes'].append(matrix.shape[0])
-                matrix = np.vstack((matrix, caricature))
+                pset['indexes'].append(detail_matrix.shape[0])
+                detail_matrix = np.vstack((detail_matrix, linkable))
             else:
                 existing_indexes, = np.where(np.linalg.norm(unique_fingerprints - fingerprint, axis=1) < fold_dist * 2)
                 if len(existing_indexes) > 0:
                     pset['indexes'].append(existing_indexes[0])
                     row_redundancies[existing_indexes[0]] += 1
                 else:
-                    pset['indexes'].append(matrix.shape[0])
-                    matrix = np.vstack((matrix, caricature))
+                    pset['indexes'].append(detail_matrix.shape[0])
+                    detail_matrix = np.vstack((detail_matrix, linkable))
                     unique_fingerprints = np.vstack((unique_fingerprints, fingerprint))
                     row_redundancies.append(1)
+    matrix = detail_matrix[:, :len(gene_names)]
+    linkage = spcluster.hierarchy.linkage(detail_matrix, metric='euclidean', method='average') if osc_linkage > 0 else None
     plt.rc('font', size=18)
     gene_dendrogram_ratio = 0.1 if bicluster else 0
-    cg = sns.clustermap(matrix, col_cluster=bicluster, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, gene_dendrogram_ratio), xticklabels=gene_names, yticklabels=False, cmap='seismic')
+    cg = sns.clustermap(matrix, row_linkage=linkage, col_cluster=bicluster, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, gene_dendrogram_ratio),
+                        xticklabels=gene_names, yticklabels=False, cmap='seismic')
     matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
     gene_display_ind = {v: k for k, v in enumerate(cg.dendrogram_col.reordered_ind)} if bicluster else {n: n for n in range(len(gene_names))}
     heatmap_index = 1 if fold_dist is None else 2
@@ -450,6 +458,7 @@ if __name__ == "__main__":
     heatmap_parser.add_argument('--color-coordinate', '--cc', action='store_true', help='coordinate connection column label colors with scatterplot focus')
     heatmap_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. e.g. 2:10% or 4att3ms:0')
     heatmap_parser.add_argument('--orbits', type=int, default=1, help='number of orbits to display for oscillatory attractors')
+    heatmap_parser.add_argument('--osc-together', '--ot', nargs='?', type=float, const=1, default=0, help='cluster oscillatory attractors near each other')
     heatmap_parser.add_argument('--fold', type=float, help='distance under which attractors will be combined into one heatmap row')
     heatmap_parser.add_argument('--bicluster', action='store_true', help='also cluster genes')
     args = parser.parse_args()
@@ -466,6 +475,6 @@ if __name__ == "__main__":
     elif args.command == 'heatmap':
         plotheatmap(report, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
                     arc_downsample=parse_downsample(args.connect_downsample), color_columns=args.color_coordinate, osc_orbits=args.orbits,
-                    fold_dist=args.fold, bicluster=args.bicluster)
+                    fold_dist=args.fold, bicluster=args.bicluster, osc_linkage=args.osc_together)
     plt.savefig(args.graph, dpi=args.dpi)
     plt.close()
