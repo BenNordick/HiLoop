@@ -132,6 +132,7 @@ def plotattractors(report, reduction, connect_psets=False, contour=False, downsa
     fig, ax_main = plt.subplots()
     if connect_psets:
         distinct_summaries = list(categorizeattractors(filtered_psets).keys())
+        default_cycler = plt.rcParams['axes.prop_cycle']()
         for i, pset in enumerate(filtered_psets):
             pset_matrix = np.array(caricatureattractors(pset['attractors']))
             pset_xy = reduction.reduce(pset_matrix)
@@ -159,11 +160,12 @@ def plotattractors(report, reduction, connect_psets=False, contour=False, downsa
                     lum *= random.uniform(0.85, 1.1)
                     sat *= random.uniform(0.8, 1.0)
             elif defocused:
-                color_spec = ax_main._get_lines.get_next_color()
+                next_prop = next(default_cycler)
+                color_spec = next_prop['color'] if 'color' in next_prop else ax_main._get_lines.get_next_color()
                 r, g, b = mplcolors.to_rgb(color_spec)
                 hue, sat, lum = colorsys.rgb_to_hls(r, g, b)
             if defocused:
-                lum = 1 - (1 - lum) * random.uniform(0.3, 0.5)
+                lum = min(1 - (1 - lum) * random.uniform(0.3, 0.5), 0.9)
                 sat *= random.uniform(0.35, 0.45)
             if color_code or defocused:
                 pset_color = colorsys.hls_to_rgb(hue, lum, sat)
@@ -198,8 +200,9 @@ def plotattractors(report, reduction, connect_psets=False, contour=False, downsa
         ax_main.set_xlim(left=0)
     if reduction.zerobased('y'):
         ax_main.set_ylim(bottom=0)
-    ax_main.xaxis.set_major_locator(mpltick.MultipleLocator(base=0.5))
-    ax_main.yaxis.set_major_locator(mpltick.MultipleLocator(base=0.5))
+    locator_base = reduction.locatorbase()
+    ax_main.xaxis.set_major_locator(mpltick.MultipleLocator(base=locator_base))
+    ax_main.yaxis.set_major_locator(mpltick.MultipleLocator(base=locator_base))
     ax_main.set_xlabel(xlabel)
     ax_main.set_ylabel(ylabel)
 
@@ -224,6 +227,8 @@ class PCA2D():
         return 'PC1', 'PC2'
     def zerobased(self, axis):
         return False
+    def locatorbase(self):
+        return 1.0
 
 class AverageLog():
     def __init__(self, settings=None):
@@ -242,6 +247,8 @@ class AverageLog():
         return ', '.join((self._componentname(c) for c in self.x_components)), ', '.join((self._componentname(c) for c in self.y_components))
     def zerobased(self, axis):
         return len(self.x_components if axis == 'x' else self.y_components) == 1
+    def locatorbase(self):
+        return 0.5
     def _parsecomponent(self, report, text):
         if text.startswith('-'):
             text = text[1:]
@@ -426,6 +433,37 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
             ax_conc_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='15%', loc='upper left')
             cg.fig.colorbar(mesh, cax=ax_conc_cbar, label='Conc.')
             ax_conc_cbar.yaxis.set_label_position('left')
+
+def deduplicateoscillators(report):
+    '''Eliminates oscillators that are extremely similar to another oscillator in each system.'''
+    distance_cutoff = 15 * len(report['species_names']) / report['ftpoints']
+    def isorbitfar(orbit_from, orbit_to):
+        min_distances = []
+        for pt in range(orbit_from.shape[0]):
+            min_distance = np.min(np.linalg.norm(orbit_to - orbit_from[pt, :], axis=1))
+            if min_distance > distance_cutoff * 5:
+                return True
+            min_distances.append(min_distance)
+        avg_min_distance = np.mean(min_distances)
+        return avg_min_distance > distance_cutoff
+    for pset in report['psets']:
+        seen_orbits = []
+        attractors = pset['attractors']
+        for i in reversed(range(len(attractors))):
+            attractor = attractors[i]
+            if not isoscillator(attractor):
+                continue
+            orbit = np.array(attractor['orbit'])
+            is_duplicate = False
+            for seen_orbit in seen_orbits:
+                if not (isorbitfar(orbit, seen_orbit) or isorbitfar(seen_orbit, orbit)):
+                    is_duplicate = True
+                    break
+            if is_duplicate:
+                del attractors[i]
+            else:
+                seen_orbits.append(orbit)
+
 def parse_systemtype(system_spec):
     if system_spec == 'else':
         return None
@@ -474,6 +512,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
+    deduplicateoscillators(report)
     if args.command == 'table':
         plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
