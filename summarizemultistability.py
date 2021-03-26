@@ -14,7 +14,7 @@ import numpy as np
 import random
 import scipy.cluster as spcluster
 import seaborn as sns
-from sklearn import decomposition
+from sklearn import decomposition, neighbors
 
 def isoscillator(attractor):
     '''Determines whether the given attractor value is an oscillatory attractor.'''
@@ -122,11 +122,12 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
+def plotattractors(report, reduction, connect_psets=False, contour=False, downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = applydownsample(summary_occurrences, downsample)
+    points = reduction.reduce(psets_matrix(filtered_psets))
     xlabel, ylabel = reduction.labels()
     fig, ax_main = plt.subplots()
     if connect_psets:
@@ -179,11 +180,19 @@ def plotattractors(report, reduction, connect_psets=False, downsample=None, focu
                 polygon = mplpatch.Polygon(projected_vertices, color=pset_color, linewidth=oscwidth, linestyle='--', fill=False, zorder=z)
                 ax_main.add_patch(polygon)
     else:
-        points = reduction.reduce(psets_matrix(filtered_psets))
         cmap = copy.copy(plt.get_cmap('viridis'))
         cmap.set_under('white', 1.0)
-        hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap}
-        ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
+        hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap, 'gridsize': 40}
+        bin_results = ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
+        fig.colorbar(bin_results, ax=ax_main, label='Attractors')
+    if contour:
+        kde = neighbors.KernelDensity(kernel='gaussian', bandwidth=0.1).fit(points)
+        bin_x, bin_y = np.mgrid[(points[:, 0].min() - 0.1):(points[:, 0].max() + 0.1):80j, (points[:, 1].min() - 0.1):(points[:, 1].max() + 0.1):80j]
+        density = np.exp(kde.score_samples(np.vstack((bin_x.flatten(), bin_y.flatten())).T))
+        high = np.quantile(density, 0.995)
+        levels = np.linspace(0.1, 1, 6) * high
+        widths = np.linspace(0.5, 1.4, 6)
+        ax_main.contour(bin_x, bin_y, density.reshape(bin_x.shape), levels, linewidths=widths, colors='black', zorder=(len(filtered_psets) * 3), alpha=0.6)
     ax_main.axis('square' if square else 'equal')
     if reduction.zerobased('x'):
         ax_main.set_xlim(left=0)
@@ -445,6 +454,7 @@ if __name__ == "__main__":
     table_parser.add_argument('--colorbar', action='store_true', help='show colorbar even when counts are displayed')
     scatterplot_parser = subcmds.add_parser('scatterplot')
     scatterplot_parser.add_argument('--line', action='store_true', help='connect attractors from the same parameter set')
+    scatterplot_parser.add_argument('--contour', action='store_true', help='show density contour lines')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 (negatives allowed) or "pca" to run PCA')
     scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. 2:10% or 4att3ms:0')
     scatterplot_parser.add_argument('--focus', nargs='*', type=str, help='type(s) of parameter sets to focus on, e.g. 3att4ms or 4')
@@ -470,7 +480,7 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         focus = {parse_systemtype(spec): True for spec in args.focus} if args.focus else None
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, connect_psets=args.line, downsample=parse_downsample(args.downsample),
+        plotattractors(report, reduction, connect_psets=args.line, contour=args.contour, downsample=parse_downsample(args.downsample),
                       focus=focus, focus_osc=args.focus_osc, color_code=args.color, square=square)
     elif args.command == 'heatmap':
         plotheatmap(report, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
