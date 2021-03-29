@@ -187,12 +187,14 @@ def plotattractors(report, reduction, connect_psets=False, contour=False, downsa
         hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap, 'gridsize': 40}
         bin_results = ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
         fig.colorbar(bin_results, ax=ax_main, label='Attractors')
-    if contour:
+    if contour is not None:
         kde = neighbors.KernelDensity(kernel='gaussian', bandwidth=0.1).fit(points)
         bin_x, bin_y = np.mgrid[(points[:, 0].min() - 0.1):(points[:, 0].max() + 0.1):80j, (points[:, 1].min() - 0.1):(points[:, 1].max() + 0.1):80j]
         density = np.exp(kde.score_samples(np.vstack((bin_x.flatten(), bin_y.flatten())).T))
-        high = np.quantile(density, 0.995)
-        levels = np.linspace(0.1, 1, 6) * high
+        sorted_densities = np.sort(density.flatten())
+        cdf = np.cumsum(sorted_densities) / np.sum(sorted_densities)
+        cutoff_indices = [np.where(cdf > percentile)[0][0] for percentile in np.linspace(args.contour, 0.99, 6)]
+        levels = [sorted_densities[c] for c in cutoff_indices]
         widths = np.linspace(0.5, 1.4, 6)
         ax_main.contour(bin_x, bin_y, density.reshape(bin_x.shape), levels, linewidths=widths, colors='black', zorder=(len(filtered_psets) * 3), alpha=0.6)
     ax_main.axis('square' if square else 'equal')
@@ -294,6 +296,9 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
     distinct_summaries = list(filtered_pset_types.keys())
     if arcs:
         arc_pset_types = categorizeattractors(applydownsample(filtered_pset_types, arc_downsample)) if arc_downsample else filtered_pset_types
+        for att, ms in list(arc_pset_types.keys()):
+            if att <= 1:
+                del arc_pset_types[att, ms]
         dendrogram_ratio = 3 / (13 + 2 * len(arc_pset_types))
     else:
         dendrogram_ratio = 0.2
@@ -436,6 +441,8 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
 
 def deduplicateoscillators(report):
     '''Eliminates oscillators that are extremely similar to another oscillator in each system.'''
+    if not 'ftpoints' in report:
+        return
     distance_cutoff = 15 * len(report['species_names']) / report['ftpoints']
     def isorbitfar(orbit_from, orbit_to):
         min_distances = []
@@ -492,7 +499,7 @@ if __name__ == "__main__":
     table_parser.add_argument('--colorbar', action='store_true', help='show colorbar even when counts are displayed')
     scatterplot_parser = subcmds.add_parser('scatterplot')
     scatterplot_parser.add_argument('--line', action='store_true', help='connect attractors from the same parameter set')
-    scatterplot_parser.add_argument('--contour', action='store_true', help='show density contour lines')
+    scatterplot_parser.add_argument('--contour', nargs='?', type=float, const=0.1, help='show density contour lines (starting at a CDF quantile)')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 (negatives allowed) or "pca" to run PCA')
     scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. 2:10% or 4att3ms:0')
     scatterplot_parser.add_argument('--focus', nargs='*', type=str, help='type(s) of parameter sets to focus on, e.g. 3att4ms or 4')
