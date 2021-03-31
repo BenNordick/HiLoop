@@ -122,7 +122,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, contour=False, downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
+def plotattractors(report, reduction, connect_psets=False, contour=False, downsample=None, density_downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -188,8 +188,11 @@ def plotattractors(report, reduction, connect_psets=False, contour=False, downsa
         bin_results = ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
         fig.colorbar(bin_results, ax=ax_main, label='Attractors')
     if contour is not None:
-        kde = neighbors.KernelDensity(kernel='gaussian', bandwidth=0.1).fit(points)
-        bin_x, bin_y = np.mgrid[(points[:, 0].min() - 0.1):(points[:, 0].max() + 0.1):80j, (points[:, 1].min() - 0.1):(points[:, 1].max() + 0.1):80j]
+        random.seed(1)
+        density_filtered_psets = applydownsample(summary_occurrences, density_downsample)
+        density_points = reduction.reduce(psets_matrix(density_filtered_psets))
+        kde = neighbors.KernelDensity(kernel='gaussian', bandwidth=0.1).fit(density_points)
+        bin_x, bin_y = np.mgrid[(density_points[:, 0].min() - 0.1):(density_points[:, 0].max() + 0.1):80j, (density_points[:, 1].min() - 0.1):(density_points[:, 1].max() + 0.1):80j]
         density = np.exp(kde.score_samples(np.vstack((bin_x.flatten(), bin_y.flatten())).T))
         sorted_densities = np.sort(density.flatten())
         cdf = np.cumsum(sorted_densities) / np.sum(sorted_densities)
@@ -502,6 +505,7 @@ if __name__ == "__main__":
     scatterplot_parser.add_argument('--contour', nargs='?', type=float, const=0.1, help='show density contour lines (starting at a CDF quantile)')
     scatterplot_parser.add_argument('--reduction', type=str, help='species for dimensions: X1,X2/Y1,Y2 (negatives allowed) or "pca" to run PCA')
     scatterplot_parser.add_argument('--downsample', nargs='+', type=str, help='chance of keeping a parameter set with specified type, e.g. 2:10% or 4att3ms:0')
+    scatterplot_parser.add_argument('--density-downsample', '--dds', nargs='+', type=str, help='downsampling rules for purposes of density estimation')
     scatterplot_parser.add_argument('--focus', nargs='*', type=str, help='type(s) of parameter sets to focus on, e.g. 3att4ms or 4')
     scatterplot_parser.add_argument('--focus-osc', action='store_true', help='always focus parameter sets containing oscillations')
     scatterplot_parser.add_argument('--color', '--cc', action='store_true', help='color lines by parameter set type')
@@ -526,7 +530,8 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         focus = {parse_systemtype(spec): True for spec in args.focus} if args.focus else None
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, connect_psets=args.line, contour=args.contour, downsample=parse_downsample(args.downsample),
+        plotattractors(report, reduction, connect_psets=args.line, contour=args.contour, 
+                      downsample=parse_downsample(args.downsample), density_downsample=parse_downsample(args.density_downsample),
                       focus=focus, focus_osc=args.focus_osc, color_code=args.color, square=square)
     elif args.command == 'heatmap':
         plotheatmap(report, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
