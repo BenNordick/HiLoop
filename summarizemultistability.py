@@ -85,7 +85,7 @@ def applydownsample(summary_occurrences, downsample):
             filtered_psets.extend(random.sample(occurrences, n_psets))
     return filtered_psets
 
-def plotmultistability(report, label_counts=False, colorbar=True):
+def plotmultistability(report, figsize=None, label_counts=False, colorbar=True):
     '''Set up a multistability table in the current pyplot.'''
     summary_occurrences = categorizeattractors(report)
     max_attractors = max(s[0] for s in summary_occurrences.keys())
@@ -103,7 +103,7 @@ def plotmultistability(report, label_counts=False, colorbar=True):
         y = max_monotonic - summary[1]
         heatmap_pixels[y][x] = len(occurrences)
         oscillators[y][x] = sum(1 for oc in occurrences if any(isoscillator(at) for at in oc['attractors']))
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=figsize)
     im = ax.imshow(heatmap_pixels, norm=mplcolors.LogNorm(vmax=heatmap_pixels.max()))
     if colorbar:
         fig.colorbar(im)
@@ -122,14 +122,14 @@ def plotmultistability(report, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, connect_psets=False, contour=False, downsample=None, density_downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
+def plotattractors(report, reduction, figsize=None, connect_psets=False, contour=False, downsample=None, density_downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
     filtered_psets = applydownsample(summary_occurrences, downsample)
     points = reduction.reduce(psets_matrix(filtered_psets))
     xlabel, ylabel = reduction.labels()
-    fig, ax_main = plt.subplots()
+    fig, ax_main = plt.subplots(figsize=figsize)
     if connect_psets:
         distinct_summaries = list(categorizeattractors(filtered_psets).keys())
         default_cycler = plt.rcParams['axes.prop_cycle']()
@@ -290,7 +290,7 @@ def summaryhsl(all_summaries, summary):
     variability_squeeze = (2 if att_range > 1 else 1) * (2 if ms_range > 1 else 1)
     return hue, 1, colorsys.ONE_THIRD, bin_width / variability_squeeze
 
-def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False, osc_linkage=0):
+def plotheatmap(report, figsize=None, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False, osc_linkage=0):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -348,10 +348,10 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
                     row_redundancies.append(1)
     matrix = detail_matrix[:, :len(gene_names)]
     linkage = spcluster.hierarchy.linkage(detail_matrix, metric='euclidean', method='average') if osc_linkage > 0 else None
-    plt.rc('font', size=18)
     gene_dendrogram_ratio = 0.1 if bicluster else 0
+    figsize = (10, 10) if figsize is None else figsize
     cg = sns.clustermap(matrix, row_linkage=linkage, col_cluster=bicluster, cbar_pos=None, dendrogram_ratio=(dendrogram_ratio, gene_dendrogram_ratio),
-                        xticklabels=gene_names, yticklabels=False, cmap='seismic')
+                        xticklabels=gene_names, yticklabels=False, cmap='seismic', linecolor=None, rasterized=True, figsize=figsize)
     matrix_display_ind = {v: k for k, v in enumerate(cg.dendrogram_row.reordered_ind)}
     gene_display_ind = {v: k for k, v in enumerate(cg.dendrogram_col.reordered_ind)} if bicluster else {n: n for n in range(len(gene_names))}
     heatmap_index = 1 if fold_dist is None else 2
@@ -401,6 +401,8 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
             for spine in ['top', 'right', 'bottom']:
                 ax_arcs.spines[spine].set_visible(False)
     mesh = cg.ax_heatmap.collections[0]
+    mesh.set_edgecolor('face')
+    mesh.set_antialiased(True)
     max_orbit_len = 0
     for pset in filtered_psets:
         for attr in pset['attractors']:
@@ -424,6 +426,7 @@ def plotheatmap(report, conc_colorbar=False, arcs=None, downsample=None, arc_dow
         for i, redundancy in enumerate(row_redundancies):
             reordered_redundancies[matrix_display_ind[i], 0] = redundancy
         fold_mesh = ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
+        fold_mesh.set_edgecolor('face')
         ax_redundancy.tick_params(labelbottom=False, labelleft=False, bottom=False)
         for spine in ['top', 'left', 'bottom']:
             ax_redundancy.spines[spine].set_visible(False)
@@ -496,6 +499,8 @@ if __name__ == "__main__":
     parser.add_argument('report', type=str, help='input JSON report filename')
     parser.add_argument('graph', type=str, help='output graph image filename')
     parser.add_argument('--dpi', type=int, default=150, help='output bitmap image DPI')
+    parser.add_argument('--figsize', type=float, nargs=2, help='figure dimensions in inches')
+    parser.add_argument('--fontsize', type=float, help='font size')
     subcmds = parser.add_subparsers(dest='command', required=True, help='kind of graph to make')
     table_parser = subcmds.add_parser('table')
     table_parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
@@ -524,17 +529,22 @@ if __name__ == "__main__":
     with open(args.report) as f:
         report = json.loads(f.read())
     deduplicateoscillators(report)
+    if args.fontsize is not None:
+        plt.rc('font', size=args.fontsize)
+    figsize = tuple(args.figsize) if args.figsize is not None else None
     if args.command == 'table':
-        plotmultistability(report, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
+        plotmultistability(report, figsize=figsize, label_counts=args.counts, colorbar=(args.colorbar or not args.counts))
     elif args.command == 'scatterplot':
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         focus = {parse_systemtype(spec): True for spec in args.focus} if args.focus else None
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, connect_psets=args.line, contour=args.contour, 
+        plotattractors(report, reduction, figsize=figsize, connect_psets=args.line, contour=args.contour, 
                       downsample=parse_downsample(args.downsample), density_downsample=parse_downsample(args.density_downsample),
                       focus=focus, focus_osc=args.focus_osc, color_code=args.color, square=square)
     elif args.command == 'heatmap':
-        plotheatmap(report, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
+        if figsize is None and args.fontsize is None:
+            plt.rc('font', size=18)
+        plotheatmap(report, figsize=figsize, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
                     arc_downsample=parse_downsample(args.connect_downsample), color_columns=args.color_coordinate, osc_orbits=args.orbits,
                     fold_dist=args.fold, bicluster=args.bicluster, osc_linkage=args.osc_together)
     plt.savefig(args.graph, dpi=args.dpi)
