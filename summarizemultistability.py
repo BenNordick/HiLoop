@@ -122,7 +122,7 @@ def plotmultistability(report, figsize=None, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, figsize=None, connect_psets=False, contour=False, downsample=None, density_downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
+def plotattractors(report, reduction, figsize=None, labelsize=None, connect_psets=False, contour=False, downsample=None, density_downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -208,8 +208,12 @@ def plotattractors(report, reduction, figsize=None, connect_psets=False, contour
     locator_base = reduction.locatorbase()
     ax_main.xaxis.set_major_locator(mpltick.MultipleLocator(base=locator_base))
     ax_main.yaxis.set_major_locator(mpltick.MultipleLocator(base=locator_base))
-    ax_main.set_xlabel(xlabel)
-    ax_main.set_ylabel(ylabel)
+    x_text = ax_main.set_xlabel(xlabel)
+    if labelsize is not None:
+        x_text.set_fontsize(labelsize)
+    y_text = ax_main.set_ylabel(ylabel)
+    if labelsize is not None:
+        y_text.set_fontsize(labelsize)
 
 def psets_matrix(psets):
     full_matrix = None
@@ -290,7 +294,7 @@ def summaryhsl(all_summaries, summary):
     variability_squeeze = (2 if att_range > 1 else 1) * (2 if ms_range > 1 else 1)
     return hue, 1, colorsys.ONE_THIRD, bin_width / variability_squeeze
 
-def plotheatmap(report, figsize=None, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False, osc_linkage=0):
+def plotheatmap(report, figsize=None, labelsize=None, conc_colorbar=False, arcs=None, downsample=None, arc_downsample=None, color_columns=False, osc_orbits=1, fold_dist=None, bicluster=False, osc_linkage=0):
     gene_names = [(n[2:] if n.startswith('X_') else n) for n in report['species_names']]
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -366,6 +370,8 @@ def plotheatmap(report, figsize=None, conc_colorbar=False, arcs=None, downsample
     height_ratios = (1, 9) if bicluster else None
     new_gs = plt.GridSpec(rows, len(width_ratios), figure=cg.fig, width_ratios=width_ratios, height_ratios=height_ratios)
     cg.ax_heatmap.set_position(new_gs[main_row, heatmap_index].get_position(cg.fig))
+    if labelsize is not None:
+        cg.ax_heatmap.tick_params(axis='x', labelsize=labelsize)
     if bicluster:
         cg.ax_col_dendrogram.set_position(new_gs[0, heatmap_index].get_position(cg.fig))
     if arcs:
@@ -500,7 +506,8 @@ if __name__ == "__main__":
     parser.add_argument('graph', type=str, help='output graph image filename')
     parser.add_argument('--dpi', type=int, default=150, help='output bitmap image DPI')
     parser.add_argument('--figsize', type=float, nargs=2, help='figure dimensions in inches')
-    parser.add_argument('--fontsize', type=float, help='font size')
+    parser.add_argument('--fontsize', type=float, help='default font size')
+    parser.add_argument('--majorfontsize', type=float, help='font size for prominent text')
     subcmds = parser.add_subparsers(dest='command', required=True, help='kind of graph to make')
     table_parser = subcmds.add_parser('table')
     table_parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
@@ -538,13 +545,13 @@ if __name__ == "__main__":
         reduction = PCA2D() if args.reduction == 'pca' else AverageLog(args.reduction)
         focus = {parse_systemtype(spec): True for spec in args.focus} if args.focus else None
         square = args.square or (args.reduction == 'pca')
-        plotattractors(report, reduction, figsize=figsize, connect_psets=args.line, contour=args.contour, 
+        plotattractors(report, reduction, figsize=figsize, labelsize=args.majorfontsize, connect_psets=args.line, contour=args.contour, 
                       downsample=parse_downsample(args.downsample), density_downsample=parse_downsample(args.density_downsample),
                       focus=focus, focus_osc=args.focus_osc, color_code=args.color, square=square)
     elif args.command == 'heatmap':
         if figsize is None and args.fontsize is None:
             plt.rc('font', size=18)
-        plotheatmap(report, figsize=figsize, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
+        plotheatmap(report, figsize=figsize, labelsize=args.majorfontsize, conc_colorbar=args.colorbar, arcs=args.connect, downsample=parse_downsample(args.downsample),
                     arc_downsample=parse_downsample(args.connect_downsample), color_columns=args.color_coordinate, osc_orbits=args.orbits,
                     fold_dist=args.fold, bicluster=args.bicluster, osc_linkage=args.osc_together)
     plt.savefig(args.graph, dpi=args.dpi)
