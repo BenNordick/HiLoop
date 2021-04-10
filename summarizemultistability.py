@@ -483,6 +483,10 @@ def deduplicateoscillators(report):
             else:
                 seen_orbits.append(orbit)
 
+def droposcillators(report):
+    '''Eliminates all systems containing any oscillatory attractors.'''
+    report['psets'] = [p for p in report['psets'] if not any(isoscillator(a) for a in p['attractors'])]
+
 def parse_systemtype(system_spec):
     if system_spec == 'else':
         return None
@@ -508,6 +512,7 @@ if __name__ == "__main__":
     parser.add_argument('--figsize', type=float, nargs=2, help='figure dimensions in inches')
     parser.add_argument('--fontsize', type=float, help='default font size')
     parser.add_argument('--majorfontsize', type=float, help='font size for prominent text')
+    parser.add_argument('--pointonly', action='store_true', help='do not show systems involving oscillators')
     subcmds = parser.add_subparsers(dest='command', required=True, help='kind of graph to make')
     table_parser = subcmds.add_parser('table')
     table_parser.add_argument('--counts', action='store_true', help='display counts in populated cells')
@@ -535,7 +540,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     with open(args.report) as f:
         report = json.loads(f.read())
-    deduplicateoscillators(report)
+    if args.pointonly:
+        droposcillators(report)
+    else:
+        deduplicateoscillators(report)
     if args.fontsize is not None:
         plt.rc('font', size=args.fontsize)
     figsize = tuple(args.figsize) if args.figsize is not None else None
