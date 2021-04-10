@@ -83,10 +83,17 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                 found_extra = False
                 for edge in all_edges:
                     node_uses_after_elimination = Counter()
+                    pfls_after_elimination = 0
+                    nfls_after_elimination = 0
                     for cycle in all_cycles:
                         if edge not in cycle_edge_sets[cycle]:
                             node_uses_after_elimination.update(cycle.value)
-                    if len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
+                            if cycle.tag[1]:
+                                pfls_after_elimination += 1
+                            else:
+                                nfls_after_elimination += 1
+                    still_excitable = pfls_after_elimination > 0 and nfls_after_elimination > 0
+                    if (possible_type1 or not still_excitable) and len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
                         found_extra = True
                         break
                 if found_extra:
@@ -150,7 +157,7 @@ def findtriangles(graph):
                 yield (a, b, c)
         if launched_specifically:
             checked += 1
-            if checked % 10 == 0:
+            if checked % 100 == 0:
                 print(f'{checked}\r', end='')
 
 if __name__ == "__main__":
