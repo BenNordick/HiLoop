@@ -187,7 +187,7 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
         hex_args = {'linewidths': 0.2, 'norm': mplcolors.LogNorm(vmin=2), 'cmap': cmap, 'gridsize': 40}
         bin_results = ax_main.hexbin(points[:, 0], points[:, 1], **hex_args)
         fig.colorbar(bin_results, ax=ax_main, label='Attractors')
-    if contour is not None:
+    if contour:
         random.seed(1)
         density_filtered_psets = applydownsample(summary_occurrences, density_downsample)
         density_points = reduction.reduce(psets_matrix(density_filtered_psets))
@@ -196,7 +196,7 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
         density = np.exp(kde.score_samples(np.vstack((bin_x.flatten(), bin_y.flatten())).T))
         sorted_densities = np.sort(density.flatten())
         cdf = np.cumsum(sorted_densities) / np.sum(sorted_densities)
-        cutoff_indices = [np.where(cdf > percentile)[0][0] for percentile in np.linspace(args.contour, 0.99, 6)]
+        cutoff_indices = [np.where(cdf > percentile)[0][0] for percentile in np.linspace(contour, 0.99, 6)]
         levels = [sorted_densities[c] for c in cutoff_indices]
         widths = np.linspace(0.5, 1.4, 6)
         ax_main.contour(bin_x, bin_y, density.reshape(bin_x.shape), levels, linewidths=widths, colors='black', zorder=(len(filtered_psets) * 3), alpha=0.6)
