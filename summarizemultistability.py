@@ -122,7 +122,8 @@ def plotmultistability(report, figsize=None, label_counts=False, colorbar=True):
                         text = f'{text}\n({oscillators[y][x]} osc.)'
                     ax.text(x, y, text, ha='center', va='center', color='gray')
 
-def plotattractors(report, reduction, figsize=None, labelsize=None, connect_psets=False, contour=False, downsample=None, density_downsample=None, focus=None, focus_osc=False, color_code=False, square=False):
+def plotattractors(report, reduction, figsize=None, labelsize=None, connect_psets=False, contour=False, downsample=None, density_downsample=None, 
+                   focus=None, focus_osc=False, hide_defocused=False, color_code=False, square=False):
     reduction.prepare(report)
     random.seed(1)
     summary_occurrences = categorizeattractors(report)
@@ -148,6 +149,8 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
             if focus or focus_osc:
                 if (focus_osc and has_oscillator) or (focus and specificrulevalue(focus, summary, default=False)):
                     z += len(filtered_psets)
+                elif hide_defocused:
+                    continue
                 else:
                     linewidth = 0.8
                     oscwidth = 1.1
@@ -192,7 +195,7 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
         density_filtered_psets = applydownsample(summary_occurrences, density_downsample)
         density_points = reduction.reduce(psets_matrix(density_filtered_psets))
         kde = neighbors.KernelDensity(kernel='gaussian', bandwidth=0.1).fit(density_points)
-        bin_x, bin_y = np.mgrid[(density_points[:, 0].min() - 0.1):(density_points[:, 0].max() + 0.1):80j, (density_points[:, 1].min() - 0.1):(density_points[:, 1].max() + 0.1):80j]
+        bin_x, bin_y = np.mgrid[(density_points[:, 0].min() - 0.15):(density_points[:, 0].max() + 0.15):80j, (density_points[:, 1].min() - 0.15):(density_points[:, 1].max() + 0.15):80j]
         density = np.exp(kde.score_samples(np.vstack((bin_x.flatten(), bin_y.flatten())).T))
         sorted_densities = np.sort(density.flatten())
         cdf = np.cumsum(sorted_densities) / np.sum(sorted_densities)

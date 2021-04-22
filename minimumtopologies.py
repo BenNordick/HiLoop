@@ -16,6 +16,13 @@ def reducetopologies(graph):
     tryreduce(atlas, graph, set(), disjoint_cache, no_nodes_removed, cycle_sets, graph)
     return atlas
 
+def summarizenetwork(graph):
+    simple_cycles = len([cycle for cycle in nx.algorithms.cycles.simple_cycles(graph) if ispositive(graph, cycle)])
+    atlas = reducetopologies(graph)
+    type1 = len([n for n in atlas.nodes if atlas.nodes[n]['motifs'] == (True, False) and len(atlas.out_edges(n)) == 0])
+    type2 = len([n for n in atlas.nodes if atlas.nodes[n]['motifs'] == (False, True) and len(atlas.out_edges(n)) == 0])
+    return {'pfls': simple_cycles, 'type1': type1, 'type2': type2, 'sum12': type1 + type2}
+
 # All below functions are implementation details
 
 def tryreduce(atlas, original_graph, checked_removals, disjoint_cache, removed_edges, cycle_sets, graph):

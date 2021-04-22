@@ -4,7 +4,6 @@ from identityholder import IdentityHolder
 import liuwangcycles
 from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
-import rendergraph
 import sys
 
 launched_specifically = False
