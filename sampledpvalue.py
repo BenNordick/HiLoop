@@ -47,7 +47,7 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
         if isfused(chosen_cycles[:2]):
             if chosen[0][1] and chosen[1][1]:
                 fusedpfls += 1
-                if chosen[0][3] or chosen[0][3]:
+                if (chosen[0][3] != chosen[1][3]) and (len(chosen_cycles[0]) == 1 or len(chosen_cycles[1]) == 1):
                     minimisa += 1
             elif chosen[0][1] != chosen[1][1]:
                 fpnp += 1

@@ -110,7 +110,7 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             all_nodes = holder1.value.union(holder2.value)
             if len(all_nodes) > max_motif_size:
                 continue
-        if holder1.tag[1] and holder2.tag[1] and (holder1.tag[2] or holder2.tag[2]):
+        if holder1.tag[1] and holder2.tag[1] and (holder1.tag[2] != holder2.tag[2]) and (len(holder1.value) == 1 or len(holder2.value) == 1):
             minimisa += 1
         elif check_nfl and holder1.tag[1] != holder2.tag[1]:
             fpnp += 1
