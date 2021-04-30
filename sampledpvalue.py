@@ -34,8 +34,8 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     pfls = len([0 for cycle in cycles if cycle[1]])
     pfl_ratio = safediv(pfls, len(cycles))
     if len(cycles) < 2:
-        return pfls, pfl_ratio, 0, 0, 0, 0, 0, 0, 0
-    fused3, bridged2, fusedpfls, type1, type2, misa, excitable, minimisa, fpnp = 0, 0, 0, 0, 0, 0, 0, 0, 0
+        return pfls, pfl_ratio, 0, 0, 0, 0, 0, 0, 0, 0
+    fused3, bridged2, fusedpfls, type1, type2, misa, excitable, missa, minimissa, fpnp = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     sample_size = min(3, len(cycles))
     for _ in range(samples):
         chosen = random.sample(cycles, sample_size)
@@ -47,8 +47,10 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
         if isfused(chosen_cycles[:2]):
             if chosen[0][1] and chosen[1][1]:
                 fusedpfls += 1
-                if (chosen[0][3] != chosen[1][3]) and (len(chosen_cycles[0]) == 1 or len(chosen_cycles[1]) == 1):
-                    minimisa += 1
+                if chosen[0][3] != chosen[1][3]:
+                    missa += 1
+                    if len(chosen_cycles[0]) == 1 or len(chosen_cycles[1]) == 1:
+                        minimissa += 1
             elif chosen[0][1] != chosen[1][1]:
                 fpnp += 1
         if sample_size < 3:
@@ -77,11 +79,11 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     type2_est = type2 * sample3_adjustment
     sample2_adjustment = comb(len(cycles), 2) / samples
     return (pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, excitable * sample3_adjustment, safediv(type1, fused3), safediv(type2, bridged2),
-            fpnp * sample2_adjustment, minimisa * sample2_adjustment, safediv(minimisa, fusedpfls))
+            fpnp * sample2_adjustment, missa * sample2_adjustment, safediv(missa, fusedpfls), minimissa * sample2_adjustment)
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, fixed_sign_sources=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
-    base_results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, Excite, T1/F3, F2/Brdg, FPNP, uMISA, uMISA/F
+    base_results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, Excite, T1/F3, F2/Brdg, FPNP, MISSA, MISSA/F, uMISSA
     for _ in range(base_trials):
         feasible_base_subgraph = graph if max_nodes_for_sample is None else permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
         for component, value in enumerate(summarize(feasible_base_subgraph, samples, max_motif_size, max_cycle_length)):
@@ -123,7 +125,7 @@ if __name__ == "__main__":
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
     empirical_cdfs, p_values, raw_results, base_results = evaluate(graph, args.permutations, args.samples, 
                                                                    args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
-    column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'Excite', 'T1/Fus3', 'T2/Brdg', 'FPNP', 'uMISA', 'uMISA/F']
+    column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'Excite', 'T1/Fus3', 'T2/Brdg', 'FPNP', 'MISSA', 'MISSA/F', 'uMISSA']
     print('\tFracLE')
     for i, column in enumerate(column_names):
         print(column, empirical_cdfs[i], sep='\t')

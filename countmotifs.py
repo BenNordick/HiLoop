@@ -103,15 +103,18 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                 excitable += 1
     if launched_specifically:
         print('Checking fused pairs')
-    minimisa = 0
+    missa = 0
+    minimissa = 0
     fpnp = 0
     for holder1, holder2 in cycle_graph.edges:
         if max_motif_size:
             all_nodes = holder1.value.union(holder2.value)
             if len(all_nodes) > max_motif_size:
                 continue
-        if holder1.tag[1] and holder2.tag[1] and (holder1.tag[2] != holder2.tag[2]) and (len(holder1.value) == 1 or len(holder2.value) == 1):
-            minimisa += 1
+        if holder1.tag[1] and holder2.tag[1] and (holder1.tag[2] != holder2.tag[2]):
+            missa += 1
+            if len(holder1.value) == 1 or len(holder2.value) == 1:
+                minimissa += 1
         elif check_nfl and holder1.tag[1] != holder2.tag[1]:
             fpnp += 1
     if launched_specifically:
@@ -143,7 +146,7 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             checked += 1
             print(f'{checked}\r', end='')
     pfls = sum(1 for holder in cycle_sets if holder.tag[1])
-    return (pfls, type1, type2, misa, minimisa, excitable, fpnp)
+    return (pfls, type1, type2, misa, missa, minimissa, excitable, fpnp)
 
 def hasrepression(graph, cycle):
     return any(graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]['repress'] for i in range(len(cycle)))
@@ -169,7 +172,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
     result = countmotifs(graph, args.maxcycle, args.maxnodes, args.checknfl)
-    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], '\nuMISA', result[4], sep='\t')
+    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], '\nMISSA', result[4], '\nuMISSA', result[5], sep='\t')
     if args.checknfl:
-        print('Excit', result[5], '\nFuse+-', result[6], sep='\t')
+        print('Excit', result[6], '\nFuse+-', result[7], sep='\t')
     
