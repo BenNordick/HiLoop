@@ -10,6 +10,7 @@ def graphvizify(graph, in_place=False, layout='dot'):
         graph = graph.copy()
     for n in graph.nodes:
         graph.nodes[n]['label'] = graph.nodes[n]['name']
+        graph.nodes[n]['fontname'] = 'DejaVuSerif'
     for e in graph.edges:
         edge = graph.edges[e]
         if (edge['repress']):

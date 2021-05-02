@@ -1,4 +1,5 @@
 import argparse
+from countmotifs import hasrepression
 import io
 import liuwangcycles
 from minimumtopologies import ispositive, ismutualinhibition
@@ -16,6 +17,8 @@ def colorsubgraph(graph, r, y, b):
         return 'solid' if ispositive(graph, cycle) else 'dashed'
     return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold2', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))])
 
+labelnodeparams = {'fontsize': 9.0, 'width': 0.1, 'height': 0.1, 'margin': 0.05, 'fontname': 'DejaVuSerif'}
+
 def logobase(**kwargs):
     ag = pygraphviz.AGraph(bgcolor='#D0D0D0', strict=False, directed=True, ranksep=0.3, **kwargs)
     ag.edge_attr['arrowsize'] = 0.8
@@ -23,9 +26,18 @@ def logobase(**kwargs):
 
 def logo_fpnp(fusion_nodes):
     ag = logobase()
-    ag.add_node('X', label=',\n'.join(fusion_nodes), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_node('X', label=',\n'.join(fusion_nodes), **labelnodeparams)
     ag.add_edge('X', 'X', 0, color='red', style='dashed', arrowhead='tee', headport='ne', tailport='se')
     ag.add_edge('X', 'X', 1, color='blue', headport='sw', tailport='nw')
+    return ag
+
+def logo_missa(fusion_nodes, missa_targets):
+    ag = logobase()
+    ag.add_node('C1', label=',\n'.join(fusion_nodes), **labelnodeparams)
+    ag.add_node('C2', label=',\n'.join(missa_targets), **labelnodeparams)
+    ag.add_edge('C1', 'C1', color='blue', headport='nw', tailport='ne')
+    ag.add_edge('C1', 'C2', color='red', arrowhead='tee')
+    ag.add_edge('C2', 'C1', color='red', arrowhead='tee')
     return ag
 
 def logo_3fused(fusion_nodes, positivities):
@@ -33,7 +45,7 @@ def logo_3fused(fusion_nodes, positivities):
     tips = [('normal' if positive else 'tee') for positive in positivities]
     ag = logobase(nodesep=0.6)
     ag.add_node('L3', shape='point', width=0.001, color='blue')
-    ag.add_node('X', label=',\n'.join(fusion_nodes), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_node('X', label=',\n'.join(fusion_nodes), **labelnodeparams)
     ag.add_edge('L3', 'X', arrowhead=tips[2], color='blue', style=styles[2])
     ag.add_edge('X', 'L3', arrowhead='none', color='blue', style=styles[2])
     ag.add_node('L1', shape='point', width=0.001, color='red')
@@ -48,8 +60,8 @@ def logo_2bridged(fusion1, fusion2, positivities, half12_positive, half21_positi
     styles = [('solid' if positive else 'dashed') for positive in positivities]
     tips = [('normal' if positive else 'tee') for positive in positivities]
     ag = logobase()
-    ag.add_node('C1', label=',\n'.join(fusion1), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
-    ag.add_node('C2', label=',\n'.join(fusion2), fontsize=9.0, width=0.1, height=0.1, margin=0.05)
+    ag.add_node('C1', label=',\n'.join(fusion1), **labelnodeparams)
+    ag.add_node('C2', label=',\n'.join(fusion2), **labelnodeparams)
     ag.add_edge('C1', 'C1', color='red', style=styles[0], arrowhead=tips[0])
     ag.add_edge('C1', 'C2', color='gold', style=styles[1], arrowhead=('normal' if half12_positive else 'tee'))
     ag.add_edge('C2', 'C1', color='gold', style=styles[1], arrowhead=('normal' if half21_positive else 'tee'))
@@ -65,7 +77,9 @@ parser.add_argument('-m', '--findmisa', type=int, default=0, help='how many MISA
 parser.add_argument('--findnegative1', type=int, default=0, help='how many negative Type I examples to find')
 parser.add_argument('--findnegative2', type=int, default=0, help='how many negative Type II examples to find')
 parser.add_argument('-p', '--findfpnp', type=int, default=0, help='how many fused PFL/NFL pair examples to find')
-parser.add_argument('--images', nargs='+', type=str, help='output image file pattern {id, type, edges}')
+parser.add_argument('-s', '--findmissa', type=int, default=0, help='how many MISSA examples to find')
+parser.add_argument('-u', '--findumissa', type=int, default=0, help='how many mini-MISSA examples to find')
+parser.add_argument('--images', nargs='+', type=str, help='output image file pattern(s) {id, type, edges}')
 parser.add_argument('--dpi', type=float, default=96.0, help='DPI of output images')
 parser.add_argument('--logo', action='store_true', help='add motif summary/logo to saved images')
 parser.add_argument('--networks', type=str, help='output GraphML file pattern {id, type}')
@@ -83,7 +97,7 @@ if args.images and args.logo and any(name.endswith('.svg') for name in args.imag
     raise RuntimeError('Logos are not supported when rendering to SVG')
 
 graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-type1, type2, excitable, misa, negative1, negative2, fpnp = 0, 0, 0, 0, 0, 0, 0
+type1, type2, excitable, misa, negative1, negative2, fpnp, missa, umissa = 0, 0, 0, 0, 0, 0, 0, 0, 0
 seen = []
 seen_edgesets = []
 printed_nodes = set()
@@ -92,6 +106,9 @@ if args.usesubgraph:
     node_ids = {graph.nodes[n]['name']: n for n in graph.nodes}
     used_ids = [node_ids[name] for name in args.usesubgraph]
     graph = nx.relabel_nodes(graph.subgraph(used_ids), {key: i for i, key in enumerate(used_ids)})
+
+def shouldcheck2fused():
+    return fpnp < args.findfpnp or missa < args.findmissa or umissa < args.findumissa
 
 def shouldcheck3fused():
     return type1 < args.find1 or excitable < args.findexcitable or negative1 < args.findnegative1
@@ -159,7 +176,7 @@ def createimage(graph, filename_placeholders, logo_func):
 
 cycles = None
 if args.maxnodes is None:
-    cycles = [(cycle, ispositive(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, args.maxcycle)]
+    cycles = [(cycle, ispositive(graph, cycle), hasrepression(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, args.maxcycle)]
     if len(cycles) < 3:
         print('Insufficient cycles for high feedback')
 
@@ -167,7 +184,7 @@ def pickcycles(count):
     if count > len(cycles):
         return None
     chosen_cycles = random.sample(cycles, count)
-    cycle_sets = [frozenset(cycle) for cycle, positive in chosen_cycles]
+    cycle_sets = [frozenset(cycle) for cycle, _, _ in chosen_cycles]
     used_nodes = cycle_sets[0]
     for cs in cycle_sets[1:]:
         used_nodes = used_nodes.union(cs)
@@ -179,7 +196,7 @@ def pickcycles(count):
         for ns in seen:
             if len(ns.intersection(used_nodes)) > args.maxsharing:
                 return None
-    subgraph = reduceedges(graph.subgraph(used_nodes), [cycle for cycle, sign in chosen_cycles])
+    subgraph = reduceedges(graph.subgraph(used_nodes), [cycle for cycle, _, _ in chosen_cycles])
     if args.maxedges is not None and len(subgraph.edges) > args.maxedges:
         return None
     edges_set = set(subgraph.edges)
@@ -191,34 +208,69 @@ def pickcycles(count):
         seen_edgesets.append(edges_set)
     return chosen_cycles, cycle_sets, used_nodes, subgraph, consume
 
-while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
+while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
     if args.maxnodes is not None:
         feasible = permutenetwork.randomsubgraph(graph, args.maxnodes)
-        cycles = [(cycle, ispositive(feasible, cycle)) for cycle in liuwangcycles.cyclesgenerator(feasible, args.maxcycle)]
-    if fpnp < args.findfpnp:
+        cycles = [(cycle, ispositive(feasible, cycle), hasrepression(feasible, cycle)) for cycle in liuwangcycles.cyclesgenerator(feasible, args.maxcycle)]
+    if shouldcheck2fused():
         pick_results = pickcycles(2)
         if pick_results is not None:
             chosen_cycles, cycle_sets, used_nodes, subgraph, consume = pick_results
-            if chosen_cycles[0][1] != chosen_cycles[1][1] and not cycle_sets[0].isdisjoint(cycle_sets[1]):
-                fpnp += 1
-                consume()
-                if args.networks:
-                    nx.write_graphml(subgraph, args.networks.format(fpnp, 'fpnp'))
-                if args.images:
-                    red, blue = (chosen_cycles[1][0], chosen_cycles[0][0]) if chosen_cycles[0][1] else (chosen_cycles[0][0], chosen_cycles[1][0])
-                    colored = colorsubgraph(subgraph, red, [], blue)
-                    shared_nodes = cycle_sets[0].intersection(cycle_sets[1])
-                    for n in shared_nodes:
-                        colored.nodes[n]['penwidth'] = 2.0
-                    logo_func = lambda: logo_fpnp([subgraph.nodes[n]['name'] for n in shared_nodes])
-                    createimage(colored, (fpnp, 'fpnp', len(colored.edges)), logo_func)
+            intersection = cycle_sets[0].intersection(cycle_sets[1])
+            if len(intersection) > 0:
+                kind = None
+                current_id = None
+                if chosen_cycles[0][1] != chosen_cycles[1][1]:
+                    if fpnp < args.findfpnp:
+                        kind = 'fpnp'
+                        fpnp += 1
+                        current_id = fpnp
+                        red, blue = (chosen_cycles[1][0], chosen_cycles[0][0]) if chosen_cycles[0][1] else (chosen_cycles[0][0], chosen_cycles[1][0])
+                elif chosen_cycles[0][1] and chosen_cycles[1][1] and (chosen_cycles[0][2] != chosen_cycles[1][2]):
+                    if missa < args.findmissa or umissa < args.findumissa:
+                        kind = 'missa'
+                        missa += 1
+                        current_id = missa
+                        red, blue = (chosen_cycles[1][0], chosen_cycles[0][0]) if chosen_cycles[1][2] else (chosen_cycles[0][0], chosen_cycles[1][0])
+                        if umissa < args.findumissa:
+                            if len(cycle_sets[0]) == 1 or len(cycle_sets[1]) == 1:
+                                kind = 'minimissa'
+                                umissa += 1
+                                current_id = umissa
+                            elif args.findmissa == 0:
+                                kind = None
+                if kind is not None:
+                    consume()
+                    if args.networks:
+                        nx.write_graphml(subgraph, args.networks.format(current_id, kind))
+                    if args.images:
+                        colored = colorsubgraph(subgraph, red, [], blue)
+                        for n in intersection:
+                            colored.nodes[n]['penwidth'] = 2.0
+                        if kind == 'fpnp':
+                            logo_func = lambda: logo_fpnp([subgraph.nodes[n]['name'] for n in intersection])
+                        else:
+                            def logo_func():
+                                intersection_i = red.index(next(iter(intersection))) # The mutual inhibition cycle is red
+                                i = intersection_i
+                                mi_len = len(red)
+                                while True:
+                                    next_i = (i + 1) % mi_len
+                                    if subgraph.edges[red[i], red[next_i]]['repress']:
+                                        mutual_inhibition_target_name = subgraph.nodes[red[next_i]]['name']
+                                        break
+                                    if next_i == intersection_i:
+                                        raise AssertionError('Could not find mutual inhibition for MISSA')
+                                    i = next_i
+                                return logo_missa([subgraph.nodes[n]['name'] for n in intersection], [mutual_inhibition_target_name])
+                        createimage(colored, (current_id, kind, len(colored.edges)), logo_func)
     if len(cycles) < 3 or not (shouldcheck3fused() or shouldcheckbridged()):
         continue
     pick_results = pickcycles(3)
     if pick_results is None:
         continue
     chosen_cycles, cycle_sets, used_nodes, subgraph, consume = pick_results
-    loop_signs = [positive for cycle, positive in chosen_cycles]
+    loop_signs = [positive for cycle, positive, _ in chosen_cycles]
     if shouldcheck3fused():
         intersection = cycle_sets[0].intersection(cycle_sets[1]).intersection(cycle_sets[2])
         if len(intersection) > 0:
@@ -245,7 +297,7 @@ while shouldcheck3fused() or shouldcheckbridged() or fpnp < args.findfpnp:
             if args.networks:
                 nx.write_graphml(subgraph, args.networks.format(current_id, kind))
             if args.images:
-                colored = colorsubgraph(subgraph, *[cycle for cycle, sign in chosen_cycles])
+                colored = colorsubgraph(subgraph, *[cycle for cycle, _, _ in chosen_cycles])
                 for n in intersection:
                     colored.nodes[n]['penwidth'] = 2.0
                 logo_func = lambda: logo_3fused({subgraph.nodes[n]['name'] for n in intersection}, loop_signs)
