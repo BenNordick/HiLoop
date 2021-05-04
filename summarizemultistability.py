@@ -23,7 +23,7 @@ def isoscillator(attractor):
 def caricatureattractor(attractor):
     '''Turn the given attractor information value (which might be an oscillation) into a single list, for comparison.'''
     if isoscillator(attractor):
-        return [(s['max'] + s['min']) / 2 for s in attractor['species']]
+        return list(np.mean(attractor['orbit'], axis=0)) if 'orbit' in attractor else [(s['max'] + s['min']) / 2 for s in attractor['species']]
     else:
         return list(attractor)
 
@@ -326,7 +326,7 @@ def plotheatmap(report, figsize=None, labelsize=None, conc_colorbar=False, arcs=
                 for s, species in enumerate(attractor['species']):
                     avg_speed = np.mean(np.abs(orbit[1:, s] - orbit[:-1, s])) / (orbit.shape[0] - 1)
                     linkable.append(avg_speed)
-                    fingerprint.extend([species['min'], species['max'], avg_speed * osc_linkage])
+                    fingerprint.extend([np.min(orbit[:, s]), np.max(orbit[:, s]), avg_speed * osc_linkage])
             else:
                 linkable.extend([0] * (len(gene_names) + 1))
                 fingerprint = [0]
@@ -427,15 +427,14 @@ def plotheatmap(report, figsize=None, labelsize=None, conc_colorbar=False, arcs=
                     display_x = gene_display_ind[x]
                     x_stops = np.linspace(display_x, display_x + 1, orbit_render_len)
                     color_stops = np.tile(np.vstack((orbit[:, x], orbit[:, x])), int(np.ceil(orbit_render_len / orbit.shape[0])))[:, :orbit_render_len]
-                    cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm)
+                    cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm, rasterized=True, aa=True)
     if fold_dist is not None:
         ax_redundancy = cg.fig.add_subplot(new_gs[main_row, 1], sharey=cg.ax_heatmap)
         y_stops = np.arange(0, matrix.shape[0] + 1)
         reordered_redundancies = np.zeros((matrix.shape[0], 1))
         for i, redundancy in enumerate(row_redundancies):
             reordered_redundancies[matrix_display_ind[i], 0] = redundancy
-        fold_mesh = ax_redundancy.pcolormesh([0, 1], y_stops, reordered_redundancies, cmap='inferno')
-        fold_mesh.set_edgecolor('face')
+        fold_mesh = ax_redundancy.pcolormesh(reordered_redundancies, cmap='inferno', rasterized=True)
         ax_redundancy.tick_params(labelbottom=False, labelleft=False, bottom=False)
         for spine in ['top', 'left', 'bottom']:
             ax_redundancy.spines[spine].set_visible(False)
