@@ -52,9 +52,9 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
         return False
     if launched_specifically:
         print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
-        print('Searching for Type I and excitable motifs')
+        print('Searching for Type I and mixed-sign high-feedback motifs')
     type1 = 0
-    excitable = 0
+    mixed = 0
     for a, b, c in findtriangles(cycle_graph):
         possible_type1 = (not check_nfl) or (a.tag[1] and b.tag[1] and c.tag[1])
         if check_nfl and not (a.tag[1] or b.tag[1] or c.tag[1]):
@@ -100,12 +100,12 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             if possible_type1:
                 type1 += 1
             else:
-                excitable += 1
+                mixed += 1
     if launched_specifically:
         print('Checking fused pairs')
     missa = 0
     minimissa = 0
-    fpnp = 0
+    excitable = 0
     for holder1, holder2 in cycle_graph.edges:
         if max_motif_size:
             all_nodes = holder1.value.union(holder2.value)
@@ -116,7 +116,7 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             if len(holder1.value) == 1 or len(holder2.value) == 1:
                 minimissa += 1
         elif check_nfl and holder1.tag[1] != holder2.tag[1]:
-            fpnp += 1
+            excitable += 1
     if launched_specifically:
         print('Searching for Type II and MISA motifs')
     checked = 0
@@ -146,7 +146,7 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             checked += 1
             print(f'{checked}\r', end='')
     pfls = sum(1 for holder in cycle_sets if holder.tag[1])
-    return (pfls, type1, type2, misa, missa, minimissa, excitable, fpnp)
+    return (pfls, type1, type2, misa, missa, minimissa, mixed, excitable)
 
 def hasrepression(graph, cycle):
     return any(graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]['repress'] for i in range(len(cycle)))
@@ -174,5 +174,5 @@ if __name__ == "__main__":
     result = countmotifs(graph, args.maxcycle, args.maxnodes, args.checknfl)
     print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], '\nMISSA', result[4], '\nuMISSA', result[5], sep='\t')
     if args.checknfl:
-        print('Excit', result[6], '\nFuse+-', result[7], sep='\t')
+        print('MixHF', result[6], '\nExcite', result[7], sep='\t')
     

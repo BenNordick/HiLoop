@@ -24,7 +24,7 @@ def logobase(**kwargs):
     ag.edge_attr['arrowsize'] = 0.8
     return ag
 
-def logo_fpnp(fusion_nodes):
+def logo_excitable(fusion_nodes):
     ag = logobase()
     ag.add_node('X', label=',\n'.join(fusion_nodes), **labelnodeparams)
     ag.add_edge('X', 'X', 0, color='red', style='dashed', arrowhead='tee', headport='ne', tailport='se')
@@ -72,11 +72,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='input GraphML file')
 parser.add_argument('-1', '--find1', type=int, default=0, help='how many Type I examples to find')
 parser.add_argument('-2', '--find2', type=int, default=0, help='how many Type II examples to find')
-parser.add_argument('-x', '--findexcitable', type=int, default=0, help='how many excitable examples to find')
+parser.add_argument('-x', '--findmixed', type=int, default=0, help='how many mixed-sign high-feedback examples to find')
 parser.add_argument('-m', '--findmisa', type=int, default=0, help='how many MISA Type II examples to find')
 parser.add_argument('--findnegative1', type=int, default=0, help='how many negative Type I examples to find')
 parser.add_argument('--findnegative2', type=int, default=0, help='how many negative Type II examples to find')
-parser.add_argument('-p', '--findfpnp', type=int, default=0, help='how many fused PFL/NFL pair examples to find')
+parser.add_argument('-e', '--findexcitable', type=int, default=0, help='how many excitable examples to find')
 parser.add_argument('-s', '--findmissa', type=int, default=0, help='how many MISSA examples to find')
 parser.add_argument('-u', '--findumissa', type=int, default=0, help='how many mini-MISSA examples to find')
 parser.add_argument('--images', nargs='+', type=str, help='output image file pattern(s) {id, type, edges}')
@@ -97,7 +97,7 @@ if args.images and args.logo and any(name.endswith('.svg') for name in args.imag
     raise RuntimeError('Logos are not supported when rendering to SVG')
 
 graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-type1, type2, excitable, misa, negative1, negative2, fpnp, missa, umissa = 0, 0, 0, 0, 0, 0, 0, 0, 0
+type1, type2, mixed, misa, negative1, negative2, excitable, missa, umissa = 0, 0, 0, 0, 0, 0, 0, 0, 0
 seen = []
 seen_edgesets = []
 printed_nodes = set()
@@ -108,10 +108,10 @@ if args.usesubgraph:
     graph = nx.relabel_nodes(graph.subgraph(used_ids), {key: i for i, key in enumerate(used_ids)})
 
 def shouldcheck2fused():
-    return fpnp < args.findfpnp or missa < args.findmissa or umissa < args.findumissa
+    return excitable < args.findexcitable or missa < args.findmissa or umissa < args.findumissa
 
 def shouldcheck3fused():
-    return type1 < args.find1 or excitable < args.findexcitable or negative1 < args.findnegative1
+    return type1 < args.find1 or mixed < args.findmixed or negative1 < args.findnegative1
 
 def shouldcheckbridged():
     return type2 < args.find2 or misa < args.findmisa or negative2 < args.findnegative2
@@ -221,10 +221,10 @@ while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
                 kind = None
                 current_id = None
                 if chosen_cycles[0][1] != chosen_cycles[1][1]:
-                    if fpnp < args.findfpnp:
-                        kind = 'fpnp'
-                        fpnp += 1
-                        current_id = fpnp
+                    if excitable < args.findexcitable:
+                        kind = 'excitable'
+                        excitable += 1
+                        current_id = excitable
                         red, blue = (chosen_cycles[1][0], chosen_cycles[0][0]) if chosen_cycles[0][1] else (chosen_cycles[0][0], chosen_cycles[1][0])
                 elif chosen_cycles[0][1] and chosen_cycles[1][1] and (chosen_cycles[0][2] != chosen_cycles[1][2]):
                     if missa < args.findmissa or umissa < args.findumissa:
@@ -247,8 +247,8 @@ while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
                         colored = colorsubgraph(subgraph, red, [], blue)
                         for n in intersection:
                             colored.nodes[n]['penwidth'] = 2.0
-                        if kind == 'fpnp':
-                            logo_func = lambda: logo_fpnp([subgraph.nodes[n]['name'] for n in intersection])
+                        if kind == 'excitable':
+                            logo_func = lambda: logo_excitable([subgraph.nodes[n]['name'] for n in intersection])
                         else:
                             def logo_func():
                                 intersection_i = red.index(next(iter(intersection))) # The mutual inhibition cycle is red
@@ -287,10 +287,10 @@ while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
                     negative1 += 1
                     current_id = negative1
             else:
-                if excitable < args.findexcitable:
-                    kind = 'excite'
-                    excitable += 1
-                    current_id = excitable
+                if mixed < args.findmixed:
+                    kind = 'mixed'
+                    mixed += 1
+                    current_id = mixed
             if kind is None:
                 continue
             consume()
