@@ -74,10 +74,14 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             relevant_extras = [c for c in extra_cycles if c.tag[1]] if possible_type1 else extra_cycles
             if len(relevant_extras) > 0:
                 double_counting = False
-                for extra in relevant_extras:
-                    if extra.isbefore(c):
-                        double_counting = True
-                        break
+                if possible_type1:
+                    double_counting = any(extra.isbefore(c) for extra in relevant_extras)
+                else:
+                    rare_sign = a.tag[1] ^ b.tag[1] ^ c.tag[1] # True if there's only one PFL
+                    for holder in triplet:
+                        double_counting = any(extra.isbefore(holder) and extra.tag[1] == rare_sign or holder.tag[1] != rare_sign for extra in extra_cycles)
+                        if double_counting:
+                            break
                 if double_counting:
                     continue
                 all_cycles = [a, b, c] + relevant_extras
@@ -94,8 +98,8 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                                 pfls_after_elimination += 1
                             else:
                                 nfls_after_elimination += 1
-                    still_excitable = pfls_after_elimination > 0 and nfls_after_elimination > 0
-                    if (possible_type1 or not still_excitable) and len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
+                    still_mixed = pfls_after_elimination > 0 and nfls_after_elimination > 0
+                    if (possible_type1 or not still_mixed) and len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
                         found_extra = True
                         break
                 if found_extra:
