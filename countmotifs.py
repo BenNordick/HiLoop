@@ -1,16 +1,14 @@
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 from identityholder import IdentityHolder
 import liuwangcycles
 from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
-import sys
+import pandas as pd
 
-launched_specifically = False
-
-def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=False):
-    if launched_specifically:
-        print('Finding cycles')
+def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=False, callback=None):
+    if callback is not None:
+        callback('stage', 'Finding cycles')
     cycle_sets = [IdentityHolder(frozenset(cycle), (cycle, ispositive(network, cycle), hasrepression(network, cycle))) for
                   cycle in liuwangcycles.generatecycles(network, max_cycle_length) if check_nfl or ispositive(network, cycle)]
     cycle_edge_sets = dict()
@@ -18,8 +16,12 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
         cycle = holder.tag[0]
         edge_set = frozenset((cycle[n], cycle[(n + 1) % len(cycle)]) for n in range(len(cycle)))
         cycle_edge_sets[holder] = edge_set
-    if launched_specifically:
-        print('Creating cycle intersection graphs')
+        if callback is not None:
+            callback('instance', ('Cycle', holder.value, [cycle]))
+            if holder.tag[1]:
+                callback('instance', ('PFL', holder.value, [cycle]))
+    if callback is not None:
+        callback('stage', 'Creating cycle intersection graphs')
     cycle_graph = nx.Graph()
     cycle_graph.add_nodes_from(cycle_sets)
     cycle_edge_graph = nx.Graph()
@@ -50,12 +52,14 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             if common_neighbor.tag[1] and cycle_edge_sets[common_neighbor] < cycle_edge_sets[holder1].union(cycle_edge_sets[holder2]):
                 return True
         return False
-    if launched_specifically:
-        print(len(cycle_sets), 'cycles,', len(cycle_graph.edges), 'node sharings')
-        print('Searching for Type I and mixed-sign high-feedback motifs')
+    if callback is not None:
+        callback('cycle_count', len(cycle_sets))
+        callback('overlap_count', len(cycle_graph.edges))
+        callback('stage', 'Searching for Type I and mixed-sign high-feedback motifs')
     type1 = 0
     mixed = 0
-    for a, b, c in findtriangles(cycle_graph):
+    for triplet in findtriangles(cycle_graph, callback):
+        a, b, c = triplet
         possible_type1 = (not check_nfl) or (a.tag[1] and b.tag[1] and c.tag[1])
         if check_nfl and not (a.tag[1] or b.tag[1] or c.tag[1]):
             continue
@@ -63,10 +67,9 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
         if len(shared_nodes) == 0:
             continue
         if not shared_nodes.isdisjoint(cycle_graph.edges[a, c]['shared']):
-            if max_motif_size:
-                all_nodes = a.value.union(b.value).union(c.value)
-                if len(all_nodes) > max_motif_size:
-                    continue
+            all_nodes = a.value.union(b.value).union(c.value) # Not a performance problem - big networks will have a max motif size set anyway
+            if max_motif_size and len(all_nodes) > max_motif_size:
+                continue
             extra_cycles = [*findinducedcycles([a, b], c), *findinducedcycles([a, c], b), *findinducedcycles([b, c], a), *findinducedcycles([a, b, c])]
             relevant_extras = [c for c in extra_cycles if c.tag[1]] if possible_type1 else extra_cycles
             if len(relevant_extras) > 0:
@@ -99,26 +102,36 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                     continue
             if possible_type1:
                 type1 += 1
+                if callback is not None:
+                    callback('instance', ('Type1', all_nodes, triplet))
             else:
                 mixed += 1
-    if launched_specifically:
-        print('Checking fused pairs')
+                if callback is not None:
+                    callback('instance', ('MixHF', all_nodes, triplet))
+    if callback is not None:
+        callback('stage', 'Checking fused pairs')
     missa = 0
     minimissa = 0
     excitable = 0
-    for holder1, holder2 in cycle_graph.edges:
-        if max_motif_size:
-            all_nodes = holder1.value.union(holder2.value)
-            if len(all_nodes) > max_motif_size:
+    for pair in cycle_graph.edges:
+        holder1, holder2 = pair
+        all_nodes = holder1.value.union(holder2.value)
+        if max_motif_size and len(all_nodes) > max_motif_size:
                 continue
         if holder1.tag[1] and holder2.tag[1] and (holder1.tag[2] != holder2.tag[2]):
             missa += 1
+            if callback is not None:
+                callback('instance', ('MISSA', all_nodes, pair))
             if len(holder1.value) == 1 or len(holder2.value) == 1:
                 minimissa += 1
+                if callback is not None:
+                    callback('instance', ('uMISSA', all_nodes, pair))
         elif check_nfl and holder1.tag[1] != holder2.tag[1]:
             excitable += 1
-    if launched_specifically:
-        print('Searching for Type II and MISA motifs')
+            if callback is not None:
+                callback('instance', ('Excite', all_nodes, pair))
+    if callback is not None:
+        callback('stage', 'Searching for Type II and MISA motifs')
     checked = 0
     type2 = 0
     misa = 0
@@ -131,48 +144,91 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                 continue
             for i2 in range(i1 + 1, len(neighbors)):
                 neigh2 = neighbors[i2]
-                if max_motif_size:
-                    all_nodes = holder.value.union(neigh1.value).union(neigh2.value)
-                    if len(all_nodes) > max_motif_size:
-                        continue
+                all_nodes = holder.value.union(neigh1.value).union(neigh2.value)
+                if max_motif_size and len(all_nodes) > max_motif_size:
+                    continue
                 if cycle_graph.has_edge(neigh1, neigh2):
                     continue
                 if coverextrapfl(holder, neigh2):
                     continue
                 type2 += 1
+                triplet = (neigh1, holder, neigh2)
+                if callback is not None:
+                    callback('instance', ('Type2', all_nodes, triplet))
                 if ismutualinhibition(network, holder.tag[0], neigh1.value, neigh2.value):
                     misa += 1
-        if launched_specifically:
+                    if callback is not None:
+                        callback('instance', ('MISA', all_nodes, triplet))
+        if callback is not None:
             checked += 1
-            print(f'{checked}\r', end='')
+            callback('cycle_progress', checked)
     pfls = sum(1 for holder in cycle_sets if holder.tag[1])
     return (pfls, type1, type2, misa, missa, minimissa, mixed, excitable)
 
 def hasrepression(graph, cycle):
     return any(graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]['repress'] for i in range(len(cycle)))
 
-def findtriangles(graph):
+def findtriangles(graph, callback):
     checked = 0
     for a, b in graph.edges:
         for c in frozenset(graph[a]).intersection(frozenset(graph[b])):
             if a.isbefore(c) and b.isbefore(c):
                 yield (a, b, c)
-        if launched_specifically:
+        if callback is not None:
             checked += 1
             if checked % 100 == 0:
-                print(f'{checked}\r', end='')
+                callback('overlap_progress', checked)
+
+def countmotifspernode(callback, *args, **kwargs):
+    motif_involvement = defaultdict(Counter)
+    def counting_callback(notification, data):
+        if notification == 'instance':
+            motif, node_ids, _ = data
+            motif_involvement[motif].update(node_ids)
+        elif callback is not None:
+            callback(notification, data)
+    counts = countmotifs(*args, **kwargs, callback=counting_callback)
+    named_motif_involvement = {motif: {graph.nodes[node]['name']: counts for node, counts in motif_counts.items()} for motif, motif_counts in motif_involvement.items()}
+    return counts, named_motif_involvement
 
 if __name__ == "__main__":
-    launched_specifically = True
     parser = argparse.ArgumentParser()
     parser.add_argument('file', type=str, help='GraphML file to process')
     parser.add_argument('--maxcycle', type=int, help='maximum cycle length')
     parser.add_argument('--maxnodes', type=int, help='maximum number of nodes in a motif')
     parser.add_argument('--checknfl', action='store_true', help='also search for motifs involving negative feedback')
+    parser.add_argument('--nodecounts', nargs='?', const=1, type=str, help='count how many motifs each node is in (optional CSV output)')
+    parser.add_argument('-q', '--quiet', action='store_true', help='do not print progress')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
-    result = countmotifs(graph, args.maxcycle, args.maxnodes, args.checknfl)
-    print('PFLs', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], '\nMISSA', result[4], '\nuMISSA', result[5], sep='\t')
+    cycle_count, node_sharing_count = 0, 0
+    def progress_callback(notification, data):
+        global cycle_count, node_sharing_count
+        if notification == 'stage':
+            print(data)
+        elif notification == 'cycle_count':
+            cycle_count = data
+            print(f'{cycle_count} cycles, ', end='')
+        elif notification == 'overlap_count':
+            node_sharing_count = data
+            print(f'{node_sharing_count} node sharings')
+        elif notification == 'overlap_progress':
+            print(f'{data}/{node_sharing_count}\r', end='')
+        elif notification == 'cycle_progress':
+            print(f'{data}/{cycle_count}\r', end='')
+    callback = None if args.quiet else progress_callback
+    if args.nodecounts is not None:
+        result, motif_involvement = countmotifspernode(callback, graph, args.maxcycle, args.maxnodes, args.checknfl)
+    else:
+        result = countmotifs(graph, args.maxcycle, args.maxnodes, args.checknfl, callback)
+    print(''.ljust(20, ' '), '\r', sep='', end='')
+    print('PFL', result[0], '\nType1', result[1], '\nType2', result[2], '\nMISA', result[3], '\nMISSA', result[4], '\nuMISSA', result[5], sep='\t')
     if args.checknfl:
         print('MixHF', result[6], '\nExcite', result[7], sep='\t')
+    if args.nodecounts is not None:
+        df = pd.DataFrame.from_dict(motif_involvement).fillna(0).astype(int)
+        if isinstance(args.nodecounts, str):
+            df.to_csv(args.nodecounts)
+        else:
+            print('\n', df, sep='')
     
