@@ -70,7 +70,7 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
             all_nodes = a.value.union(b.value).union(c.value) # Not a performance problem - big networks will have a max motif size set anyway
             if max_motif_size and len(all_nodes) > max_motif_size:
                 continue
-            extra_cycles = [*findinducedcycles([a, b], c), *findinducedcycles([a, c], b), *findinducedcycles([b, c], a), *findinducedcycles([a, b, c])]
+            extra_cycles = list({*findinducedcycles([a, b], c), *findinducedcycles([a, c], b), *findinducedcycles([b, c], a), *findinducedcycles([a, b, c])})
             relevant_extras = [c for c in extra_cycles if c.tag[1]] if possible_type1 else extra_cycles
             if len(relevant_extras) > 0:
                 double_counting = False
@@ -79,8 +79,8 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                 else:
                     rare_sign = a.tag[1] ^ b.tag[1] ^ c.tag[1] # True if there's only one PFL
                     for holder in triplet:
-                        double_counting = any(extra.isbefore(holder) and extra.tag[1] == rare_sign or holder.tag[1] != rare_sign for extra in extra_cycles)
-                        if double_counting:
+                        if any(extra.isbefore(holder) and (extra.tag[1] == rare_sign or holder.tag[1] != rare_sign) for extra in extra_cycles):
+                            double_counting = True
                             break
                 if double_counting:
                     continue
@@ -99,7 +99,7 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
                             else:
                                 nfls_after_elimination += 1
                     still_mixed = pfls_after_elimination > 0 and nfls_after_elimination > 0
-                    if (possible_type1 or not still_mixed) and len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
+                    if (possible_type1 or still_mixed) and len(node_uses_after_elimination) > 0 and max(node_uses_after_elimination.values()) >= 3:
                         found_extra = True
                         break
                 if found_extra:
