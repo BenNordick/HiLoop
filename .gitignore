@@ -1,4 +1,5 @@
 __pycache__/
+.venv*/
 .vscode/
 bin/
 data/
@@ -9,5 +10,7 @@ lib64
 out/
 share/
 site-packages/
+nohup.out
 pyvenv.cfg
+_*.gxml
 _*.py
