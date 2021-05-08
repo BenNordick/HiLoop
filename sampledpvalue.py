@@ -82,8 +82,8 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
             excitable * sample2_adjustment, missa * sample2_adjustment, safediv(missa, fusedpfls), minimissa * sample2_adjustment)
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, 
-             fixed_sign_sources=None, base_callback=None):
-    base_connected = nx.algorithms.is_strongly_connected(graph)
+             fixed_sign_sources=None, try_scc=False, base_callback=None):
+    require_scc = try_scc and nx.algorithms.is_strongly_connected(graph)
     base_results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, MixHF, T1/F3, F2/Brdg, Excite, MISSA, MISSA/F, uMISSA
     for _ in range(base_trials):
         feasible_base_subgraph = graph if max_nodes_for_sample is None else permutenetwork.randomsubgraph(graph, max_nodes_for_sample)
@@ -94,7 +94,7 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
     if base_callback is not None:
         base_callback(base_results)
     permutation_results = [[] for _ in base_results]
-    for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample, fixed_sign_sources):
+    for checked_permutations, permutation in permutenetwork.generatepermutations(graph, require_scc, use_full_permutation, max_nodes_for_sample, fixed_sign_sources):
         for component, value in enumerate(summarize(permutation, samples, max_motif_size, max_cycle_length)):
             permutation_results[component].append(value)
         if checked_permutations == permutations:
@@ -123,14 +123,15 @@ if __name__ == "__main__":
     parser.add_argument('--maxmotifsize', type=int, help='maximum number of nodes in a motif')
     parser.add_argument('--fixedsign', type=str, help='regex matching nodes whose source regulations to preserve signs of')
     parser.add_argument('--saveraw', type=str, help='CSV file to save raw sample results in')
+    parser.add_argument('--scc', action='store_true', help='only consider strongly connected permutations')
     parser.add_argument('--showbase', action='store_true', help='display the raw base results list')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
     def callback(base_results):
         if args.showbase:
             print('Base results:', base_results)
-    empirical_cdfs, p_values, raw_results, base_results = evaluate(graph, args.permutations, args.samples, 
-                                                                   args.basetrials, args.dcm, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign, callback)
+    empirical_cdfs, p_values, raw_results, base_results = evaluate(graph, args.permutations, args.samples, args.basetrials, args.dcm,
+                                                                   args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign, args.scc, callback)
     column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'MixHF', 'T1/Fus3', 'T2/Brdg', 'Excite', 'MISSA', 'MISSA/F', 'uMISSA']
     print('\tFracLE')
     for i, column in enumerate(column_names):
