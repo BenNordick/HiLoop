@@ -85,8 +85,9 @@ parser.add_argument('--logo', action='store_true', help='add motif summary/logo 
 parser.add_argument('--networks', type=str, help='output GraphML file pattern {id, type}')
 parser.add_argument('--printnodes', action='store_true', help='print distinct node names')
 parser.add_argument('--maxedges', type=int, help='maximum number of unique edges in examples')
-parser.add_argument('--maxnodes', type=int, help='maximum size of network to attempt cycle detection for')
+parser.add_argument('--maxnodes', type=int, help='maximum number of nodes in an example')
 parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
+parser.add_argument('--maxsubgraph', type=int, help='maximum size of network to attempt cycle detection for')
 parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in common with an already selected subnetwork')
 parser.add_argument('--reduceedges', action='store_true', help='randomly drop some extra edges')
 parser.add_argument('--requirenodes', nargs='+', type=str, help='node(s) that must be present in the subnetwork')
@@ -175,7 +176,7 @@ def createimage(graph, filename_placeholders, logo_func):
             rendergraph.rendergraph(graph, pattern.format(*filename_placeholders), in_place=True)
 
 cycles = None
-if args.maxnodes is None:
+if args.maxsubgraph is None:
     cycles = [(cycle, ispositive(graph, cycle), hasrepression(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, args.maxcycle)]
     if len(cycles) < 3:
         print('Insufficient cycles for high feedback')
@@ -188,6 +189,9 @@ def pickcycles(count):
     used_nodes = cycle_sets[0]
     for cs in cycle_sets[1:]:
         used_nodes = used_nodes.union(cs)
+    if args.maxnodes is not None:
+        if len(used_nodes) > args.maxnodes:
+            return None
     if args.requirenodes is not None:
         used_names = {graph.nodes[n]['name'] for n in used_nodes}
         if not used_names.issuperset(args.requirenodes):
@@ -209,8 +213,8 @@ def pickcycles(count):
     return chosen_cycles, cycle_sets, used_nodes, subgraph, consume
 
 while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
-    if args.maxnodes is not None:
-        feasible = permutenetwork.randomsubgraph(graph, args.maxnodes)
+    if args.maxsubgraph is not None:
+        feasible = permutenetwork.randomsubgraph(graph, args.maxsubgraph)
         cycles = [(cycle, ispositive(feasible, cycle), hasrepression(feasible, cycle)) for cycle in liuwangcycles.cyclesgenerator(feasible, args.maxcycle)]
     if shouldcheck2fused():
         pick_results = pickcycles(2)
