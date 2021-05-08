@@ -81,7 +81,8 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
     return (pfls, pfl_ratio, type1_est, type2_est, misa * sample3_adjustment, mixed * sample3_adjustment, safediv(type1, fused3), safediv(type2, bridged2),
             excitable * sample2_adjustment, missa * sample2_adjustment, safediv(missa, fusedpfls), minimissa * sample2_adjustment)
 
-def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, fixed_sign_sources=None):
+def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, 
+             fixed_sign_sources=None, base_callback=None):
     base_connected = nx.algorithms.is_strongly_connected(graph)
     base_results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, MixHF, T1/F3, F2/Brdg, Excite, MISSA, MISSA/F, uMISSA
     for _ in range(base_trials):
@@ -90,7 +91,8 @@ def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=
             base_results[component] += value
     for component in range(len(base_results)):
         base_results[component] /= base_trials
-    print('Base results:', base_results)
+    if base_callback is not None:
+        base_callback(base_results)
     permutation_results = [[] for _ in base_results]
     for checked_permutations, permutation in permutenetwork.generatepermutations(graph, base_connected, use_full_permutation, max_nodes_for_sample, fixed_sign_sources):
         for component, value in enumerate(summarize(permutation, samples, max_motif_size, max_cycle_length)):
@@ -116,15 +118,19 @@ if __name__ == "__main__":
     parser.add_argument('samples', type=int, help='number of cycle triplets to sample from each permutation')
     parser.add_argument('--maxnodes', type=int, help='maximum size of network to attempt cycle detection for')
     parser.add_argument('--basetrials', type=int, default=10, help='number of trials to average for the input network')
-    parser.add_argument('--desonly', action='store_true', help='use only double-edge swaps for permutation')
+    parser.add_argument('--dcm', action='store_true', help='use directed configuration model for permutation')
     parser.add_argument('--maxcycle', type=int, help='maximum number of nodes in a cycle')
     parser.add_argument('--maxmotifsize', type=int, help='maximum number of nodes in a motif')
     parser.add_argument('--fixedsign', type=str, help='regex matching nodes whose source regulations to preserve signs of')
     parser.add_argument('--saveraw', type=str, help='CSV file to save raw sample results in')
+    parser.add_argument('--showbase', action='store_true', help='display the raw base results list')
     args = parser.parse_args()
     graph = nx.convert_node_labels_to_integers(nx.read_graphml(args.file))
+    def callback(base_results):
+        if args.showbase:
+            print('Base results:', base_results)
     empirical_cdfs, p_values, raw_results, base_results = evaluate(graph, args.permutations, args.samples, 
-                                                                   args.basetrials, not args.desonly, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign)
+                                                                   args.basetrials, args.dcm, args.maxnodes, args.maxmotifsize, args.maxcycle, args.fixedsign, callback)
     column_names = ['PFLs', 'PFL/FL', 'Type 1', 'Type 2', 'MISA', 'MixHF', 'T1/Fus3', 'T2/Brdg', 'Excite', 'MISSA', 'MISSA/F', 'uMISSA']
     print('\tFracLE')
     for i, column in enumerate(column_names):
