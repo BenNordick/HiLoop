@@ -1,4 +1,3 @@
-from disjointcache import DisjointCache
 from identityholder import IdentityHolder
 import networkx as nx
 
@@ -7,13 +6,12 @@ def reducetopologies(graph):
     graph = nx.convert_node_labels_to_integers(graph)
     cycle_sets = preparecyclesets(graph)
     atlas = nx.DiGraph()
-    disjoint_cache = DisjointCache(len(graph.nodes))
-    root_motifs = getmotifs(cycle_sets, len(graph.nodes), disjoint_cache)
+    root_motifs = getmotifs(cycle_sets, len(graph.nodes))
     if (root_motifs == (False, False)):
         return atlas
     no_nodes_removed = frozenset()
     atlas.add_node(no_nodes_removed, topology=graph, motifs=root_motifs)
-    tryreduce(atlas, graph, set(), disjoint_cache, no_nodes_removed, cycle_sets, graph)
+    tryreduce(atlas, graph, set(), no_nodes_removed, cycle_sets, graph)
     return atlas
 
 def summarizenetwork(graph):
@@ -25,7 +23,7 @@ def summarizenetwork(graph):
 
 # All below functions are implementation details
 
-def tryreduce(atlas, original_graph, checked_removals, disjoint_cache, removed_edges, cycle_sets, graph):
+def tryreduce(atlas, original_graph, checked_removals, removed_edges, cycle_sets, graph):
     for edge in graph.edges:
         new_removed_edges = removed_edges.union(frozenset([edge]))
         if (new_removed_edges in checked_removals):
@@ -35,12 +33,12 @@ def tryreduce(atlas, original_graph, checked_removals, disjoint_cache, removed_e
         checked_removals.add(new_removed_edges)
         reduced_graph = nx.classes.function.restricted_view(original_graph, [], new_removed_edges)
         remaining_cycles = cycle_sets.difference(graph.edges[edge]['cycles'])
-        motifs = getmotifs(remaining_cycles, len(graph.nodes), disjoint_cache)
+        motifs = getmotifs(remaining_cycles, len(graph.nodes))
         if (motifs == (False, False)):
             continue
         atlas.add_node(new_removed_edges, topology=reduced_graph, motifs=motifs)
         atlas.add_edge(removed_edges, new_removed_edges, removed_edge=edge)
-        tryreduce(atlas, original_graph, checked_removals, disjoint_cache, new_removed_edges, remaining_cycles, reduced_graph)
+        tryreduce(atlas, original_graph, checked_removals, new_removed_edges, remaining_cycles, reduced_graph)
 
 def preparecyclesets(graph):
     for edge in graph.edges:
@@ -52,8 +50,8 @@ def preparecyclesets(graph):
             graph.edges[cycle[n], cycle[(n + 1) % len(cycle)]]['cycles'].add(cycle_sets[index])
     return frozenset(cycle_sets)
 
-def getmotifs(cycle_sets, node_count, disjoint_cache):
-    return (hastype1(cycle_sets, node_count), hastype2(cycle_sets, disjoint_cache))
+def getmotifs(cycle_sets, node_count):
+    return (hastype1(cycle_sets, node_count), hastype2(cycle_sets))
 
 def hastype1(cycle_sets, node_count):
     node_uses = [0] * node_count
@@ -64,7 +62,7 @@ def hastype1(cycle_sets, node_count):
                 return True
     return False
 
-def hastype2(cycle_sets, disjoint_cache):
+def hastype2(cycle_sets):
     cycle_sets_list = list(cycle_sets)
     for connector_c in range(len(cycle_sets_list)):
         connector = cycle_sets_list[connector_c]
@@ -72,13 +70,13 @@ def hastype2(cycle_sets, disjoint_cache):
             if (c1 == connector_c):
                 continue
             cycle1 = cycle_sets_list[c1]
-            if (disjoint_cache.isdisjoint(connector, cycle1)):
+            if (connector.value.isdisjoint(cycle1.value)):
                 continue
             for c2 in range(c1 + 1, len(cycle_sets_list)):
                 if (c2 == connector_c):
                     continue
                 cycle2 = cycle_sets_list[c2]
-                if ((not disjoint_cache.isdisjoint(connector, cycle2)) and disjoint_cache.isdisjoint(cycle1, cycle2)):
+                if ((not connector.value.isdisjoint(cycle2.value)) and cycle1.value.isdisjoint(cycle2.value)):
                     return True
     return False
 
