@@ -1,11 +1,31 @@
 import networkx as nx
 from networkx.drawing.nx_agraph import to_agraph
 
+# Support functions for drawing network diagrams
+
 def rendergraph(graph, filename, in_place=False):
+    """
+    Draw a graph to an image file.
+
+    Arguments:
+    - graph: NetworkX DiGraph
+    - filename: where to save the image (format auto-detected by Graphviz)
+    - in_place: whether to make a copy of the graph before adding Graphviz attributes
+    """
     ag = graphvizify(graph, in_place=in_place)
     ag.draw(filename)
 
 def graphvizify(graph, in_place=False, layout='dot'):
+    """
+    Turn a NetworkX DiGraph into a PyGraphviz graph with drawing attributes.
+
+    Arguments:
+    - graph: NetworkX DiGraph
+    - in_place: whether to make a copy before adding attributes
+    - layout: Graphviz layout engine to use for node positions (or None to delay layout)
+
+    Returns a PyGraphviz AGraph.
+    """
     if not in_place:
         graph = graph.copy()
     for n in graph.nodes:
@@ -21,10 +41,20 @@ def graphvizify(graph, in_place=False, layout='dot'):
     return ag
 
 def highlightedge(edge_attrs):
+    """Set edge attributes on a dict to enlarge the edge."""
     edge_attrs['penwidth'] = 2.0
     edge_attrs['arrowsize'] = 1.2
 
 def colorcycle(graph, cycle, color, mix_color):
+    """
+    Color and highlight a cycle of a DiGraph in-place.
+
+    Arguments:
+    - graph: NetworkX DiGraph
+    - cycle: list of node IDs in the cycle
+    - color: name of color to apply to yet-uncolored edges in the cycle
+    - mix_color: name of color to apply to already colored edges, or dict of existing color to new color
+    """
     for i in range(len(cycle)):
         edge = graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]
         highlightedge(edge)
@@ -37,6 +67,15 @@ def colorcycle(graph, cycle, color, mix_color):
             edge['color'] = color
 
 def colorcycles(graph, cycles):
+    """
+    Color and highlight cycles of a DiGraph without color mixing, producing a multigraph.
+
+    Arguments:
+    - graph: NetworkX DiGraph
+    - cycles: list of lists of node IDs in each cycle
+
+    Returns a NetworkX MultiDiGraph.
+    """
     multigraph = nx.MultiDiGraph(graph)
     colored_edges = set()
     for cycle_info in cycles:
@@ -59,6 +98,15 @@ def colorcycles(graph, cycles):
     return multigraph
 
 def colorneighborhood(graph, start_node, colors, color_last_edges=True):
+    """
+    Color nodes and edges according to how far they are from a specific starting node.
+
+    Likely only useful for debugging. Arguments:
+    - graph: NetworkX DiGraph to color in-place
+    - start_node: node ID of starting node
+    - colors: list of colors for nodes and outgoing edges at each level (starting node first)
+    - color_last_edges: whether to color outgoing edges of the last level of colored nodes
+    """
     current_ring = set([start_node])
     next_ring = set()
     level = 0

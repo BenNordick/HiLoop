@@ -1,8 +1,16 @@
 from collections import deque
 import networkx as nx
 
+# PyPy virtual environment recommended for performance
+
 def generatecycles(graph, max_length=None):
-    '''Generates simple cycles in the directed graph using Liu & Wang's algorithm.'''
+    """
+    Generate simple cycles, in increasing order of length, from the directed graph using Liu & Wang's algorithm.
+
+    Arguments:
+    - graph: NetworkX DiGraph
+    - max_length: maximum length of cycle to generate (note that Johnson's algorithm is faster for unbounded length)
+    """
     queue = deque([n] for n in graph.nodes)
     while queue:
         path = queue.popleft()
@@ -15,8 +23,10 @@ def generatecycles(graph, max_length=None):
                 queue.append(path + [n])
 
 def cyclesgenerator(graph, max_length=None):
-    '''Returns the best generator for simple cycles based on the desired maximum length.'''
+    """Return the best generator for simple cycles in a DiGraph based on the desired maximum length."""
     if max_length:
+        # Liu & Wang's algorithm must be used to avoid enumerating excessively long cycles
         return generatecycles(graph, max_length)
     else:
+        # Johnson's algorithm is faster for enumerating all cycles
         return nx.simple_cycles(graph)

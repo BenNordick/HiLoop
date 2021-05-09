@@ -2,6 +2,16 @@ import networkx as nx
 import sys
 
 def loadadjmatrix(array, names=None):
+    """
+    Create a DiGraph from a signed adjacency matrix.
+
+    Each value in the array specifies the interaction between the row and column nodes.
+    Zero means no edge, a positive number means activation, and a negative number means repression.
+
+    Arguments:
+    - array: list of lists, first index indicates source, second index indicates target
+    - names: optional list of names for the nodes (same order as array)
+    """
     graph = nx.DiGraph()
     graph.add_nodes_from(range(len(array)))
     if names is None:
@@ -20,6 +30,13 @@ def loadadjmatrix(array, names=None):
     return graph
 
 def loadreader(matrix, names=None):
+    """
+    Create a DiGraph from a reader of a tab-separated adjacency matrix text document.
+
+    For each entry, the row specifies the source and the column specifies the target.
+    The main matrix document must contain only the body of the matrix, not node names, which can be provided in the names reader.
+    Comment lines are indicated with percent signs. Text on a name line after an equals sign is also ignored.
+    """
     array = []
     for line in matrix:
         array.append([int(part) for part in line.strip().split('\t')])
@@ -29,8 +46,6 @@ def loadreader(matrix, names=None):
         for line in names:
             if line.startswith('%') or line.strip() == '':
                 continue
-            if '=' not in line:
-                raise ValueError('missing equals sign in non-comment line ' + repr(line))
             names_array.append(line.split('=')[0].strip())
     return loadadjmatrix(array, names_array)
 

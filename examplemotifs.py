@@ -10,7 +10,10 @@ import pygraphviz
 import random
 import rendergraph
 
+# PyPy virtual environment recommended for performance
+
 def colorsubgraph(graph, r, y, b):
+    """Color the cycles of a selected NetworkX subnetwork red, yellow, and blue, dashing negative feedback loops."""
     def cyclestyle(graph, cycle):
         if len(cycle) == 0:
             return 'solid'
@@ -20,11 +23,13 @@ def colorsubgraph(graph, r, y, b):
 labelnodeparams = {'fontsize': 9.0, 'width': 0.1, 'height': 0.1, 'margin': 0.05, 'fontname': 'DejaVuSerif'}
 
 def logobase(**kwargs):
+    """Create a PyGraphviz graph for a logo."""
     ag = pygraphviz.AGraph(bgcolor='#D0D0D0', strict=False, directed=True, ranksep=0.3, **kwargs)
     ag.edge_attr['arrowsize'] = 0.8
     return ag
 
 def logo_excitable(fusion_nodes):
+    """Create an excitable network's logo: red negative feedback loop and blue positive feedback loop interconnected."""
     ag = logobase()
     ag.add_node('X', label=',\n'.join(fusion_nodes), **labelnodeparams)
     ag.add_edge('X', 'X', 0, color='red', style='dashed', arrowhead='tee', headport='ne', tailport='se')
@@ -32,6 +37,7 @@ def logo_excitable(fusion_nodes):
     return ag
 
 def logo_missa(fusion_nodes, missa_targets):
+    """Create a MISSA network's logo: red mutual inhibition edges and blue self-activation interconnected."""
     ag = logobase()
     ag.add_node('C1', label=',\n'.join(fusion_nodes), **labelnodeparams)
     ag.add_node('C2', label=',\n'.join(missa_targets), **labelnodeparams)
@@ -41,6 +47,7 @@ def logo_missa(fusion_nodes, missa_targets):
     return ag
 
 def logo_3fused(fusion_nodes, positivities):
+    """Create a Type 1, mixed, or negative Type 1 logo: three interconnected loops with specified positivities."""
     styles = [('solid' if positive else 'dashed') for positive in positivities]
     tips = [('normal' if positive else 'tee') for positive in positivities]
     ag = logobase(nodesep=0.6)
@@ -57,6 +64,7 @@ def logo_3fused(fusion_nodes, positivities):
     return ag
 
 def logo_2bridged(fusion1, fusion2, positivities, half12_positive, half21_positive):
+    """Create a Type 2, MISA, or negative Type 2 logo: yellow connector cycle interconnected with red and blue."""
     styles = [('solid' if positive else 'dashed') for positive in positivities]
     tips = [('normal' if positive else 'tee') for positive in positivities]
     ag = logobase()
@@ -106,18 +114,23 @@ printed_nodes = set()
 if args.usesubgraph:
     node_ids = {graph.nodes[n]['name']: n for n in graph.nodes}
     used_ids = [node_ids[name] for name in args.usesubgraph]
+    # Maintain specified order to allow finagling of priority (for dot layout)
     graph = nx.relabel_nodes(graph.subgraph(used_ids), {key: i for i, key in enumerate(used_ids)})
 
 def shouldcheck2fused():
+    """Determine whether examples of 2-cycle motifs still need to be found."""
     return excitable < args.findexcitable or missa < args.findmissa or umissa < args.findumissa
 
 def shouldcheck3fused():
+    """Determine whether examples of fused 3-cycle motifs still need to be found."""
     return type1 < args.find1 or mixed < args.findmixed or negative1 < args.findnegative1
 
 def shouldcheckbridged():
+    """Determine whether examples of bridged (Type-2-like) motifs still need to be found."""
     return type2 < args.find2 or misa < args.findmisa or negative2 < args.findnegative2
 
 def printnewnodes(nodes):
+    """Print any nodes that have not been displayed yet, if requested."""
     if not args.printnodes:
         return
     for n in nodes.difference(printed_nodes):
@@ -125,6 +138,7 @@ def printnewnodes(nodes):
         print(graph.nodes[n]['name'])
 
 def reduceedges(subgraph, cycles):
+    """Randomly drop some edges that are not in any of the selected cycles, if requested."""
     if args.reduceedges:
         trimmed = nx.DiGraph()
         trimmed.add_nodes_from(subgraph.nodes)
@@ -144,7 +158,9 @@ def reduceedges(subgraph, cycles):
         return subgraph
 
 def createimage(graph, filename_placeholders, logo_func):
+    """Save an already colored graph to image files, with logo if requested."""
     if args.logo:
+        # Graphviz does not really handle subgraphs with different layout parameters, so render the logo graph separately and paste it in as an image
         logo_ag = logo_func()
         logo_ag.graph_attr['dpi'] = args.dpi            
         logo_ag.layout('dot')
@@ -182,6 +198,7 @@ if args.maxsubgraph is None:
         print('Insufficient cycles for high feedback')
 
 def pickcycles(count):
+    """Try to pick a subgraph, from a tuple of cycles, that matches the desired size, uniqueness, and membership requirements."""
     if count > len(cycles):
         return None
     chosen_cycles = random.sample(cycles, count)

@@ -6,7 +6,33 @@ from minimumtopologies import ispositive, ismutualinhibition
 import networkx as nx
 import pandas as pd
 
+# PyPy virtual environment recommended for performance
+
 def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=False, callback=None):
+    """
+    Systematically count/enumerate instances of high-feedback topologies in a network.
+    
+    Each instance is a way to choose a set of edges such that no edge can be removed without abolishing the high-feedback nature of the subnetwork.
+    This is similar to the count of "minimum topologies" from Ye et al. 2019, but some topologies with more than the required number of cycles can
+    still be considered minimal by this function if removing any edge would leave fewer cycles than necessary. 
+
+    Arguments:
+    - network: NetworkX DiGraph representing the network
+    - max_cycle_length: maximum length of cycle to enumerate (needed for moderately large networks since all cycles must be held in memory)
+    - max_motif_size: maximum size in nodes of counted motif instances
+    - check_nfl: whether to count excitable and mixed-sign high-feedback motifs, which require enumerating negative feedback loops as well (much slower)
+    - callback: callable to receive progress information and motif instances
+
+    The callback, if provided, must take two positional arguments: notification type and data. These notifications will be given:
+    - stage: the counting process moved into a new stage, name specified in data as string
+    - instance: a motif instance was found; data is a tuple of the motif name, frozenset of nodes involved, and list of cycle holders
+    - cycle_count: the number of cycles was determined, specified in data as int
+    - overlap_count: the number of cycle intersections was determined, specified in data as int
+    - overlap_progress: progress in enumerating triangles in the cycle intersection graph (e.g. Type 1), data is number of cycle intersections checked
+    - cycle_progress: progress in enumerating 3-paths in the cycle intersection graph (e.g. Type 2), data is number of cycles checked
+
+    Returns a tuple: counts of PFLs, Type 1, Type 2, MISA, MISSA, mini-MISSA, mixed-sign high-feedback, excitable.
+    """
     if callback is not None:
         callback('stage', 'Finding cycles')
     cycle_sets = [IdentityHolder(frozenset(cycle), (cycle, ispositive(network, cycle), hasrepression(network, cycle))) for
@@ -17,9 +43,9 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
         edge_set = frozenset((cycle[n], cycle[(n + 1) % len(cycle)]) for n in range(len(cycle)))
         cycle_edge_sets[holder] = edge_set
         if callback is not None:
-            callback('instance', ('Cycle', holder.value, [cycle]))
+            callback('instance', ('Cycle', holder.value, [holder]))
             if holder.tag[1]:
-                callback('instance', ('PFL', holder.value, [cycle]))
+                callback('instance', ('PFL', holder.value, [holder]))
     if callback is not None:
         callback('stage', 'Creating cycle intersection graphs')
     cycle_graph = nx.Graph()
@@ -170,9 +196,14 @@ def countmotifs(network, max_cycle_length=None, max_motif_size=None, check_nfl=F
     return (pfls, type1, type2, misa, missa, minimissa, mixed, excitable)
 
 def hasrepression(graph, cycle):
+    """Return whether the cycle (list of node IDs) in the graph (NetworkX DiGraph) includes any repressions."""
     return any(graph.edges[cycle[i], cycle[(i + 1) % len(cycle)]]['repress'] for i in range(len(cycle)))
 
 def findtriangles(graph, callback):
+    """
+    Generate triangles (tuples of cycle holders) of the cycle intersection graph for countmotifs.
+    To avoid duplicates, the third node C is always after A and B in the IdentityHolder total order.
+    """
     checked = 0
     for a, b in graph.edges:
         for c in frozenset(graph[a]).intersection(frozenset(graph[b])):
@@ -184,6 +215,12 @@ def findtriangles(graph, callback):
                 callback('overlap_progress', checked)
 
 def countmotifspernode(callback, *args, **kwargs):
+    """
+    Systematically count motif instances and how many of each motif each node is involved in.
+
+    Wraps countmotifs. The callback, if specified, will not receive "instance" notifications.
+    Returns a tuple: countmotifs results tuple, dict of dicts {motif: {node: instances}}.
+    """
     motif_involvement = defaultdict(Counter)
     def counting_callback(notification, data):
         if notification == 'instance':

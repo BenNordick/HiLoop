@@ -187,6 +187,8 @@ For example, to test 20,000 parameterizations of the small Ye *et al.* T cell ne
     (hiloop_cpy) $ mkdir -p modeling
     (hiloop_cpy) $ python multistability.py ye_tcell.gxml modeling/ye_tcell.json --attractors 3 --psets 20000
 
+This will take some time.
+
 Console output can be suppressed with `--quiet`.
 The number of initial concentrations per species can be set with `--concs`.
 You may want to decrease this from the default of 5 if your network has more than four nodes/species.

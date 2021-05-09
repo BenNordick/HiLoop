@@ -7,7 +7,14 @@ import re
 import scipy.signal as ssig
 import tellurium as te
 
+# CPython virtual environment required
+
 def coalesce_adjacent(points):
+    """
+    Remove all but the last number in each run of consecutive integers in an ascending list of integers.
+
+    This is used by describe_attractor to detect when a time course has the same value at different times (necessary for oscillations).
+    """
     if len(points) == 0:
         return points
     result = []
@@ -20,6 +27,20 @@ def coalesce_adjacent(points):
     return result
 
 def describe_attractor(result, dt, print_results):
+    """
+    Categorize and characterize the endpoint of a simulated time course.
+
+    Arguments:
+    - result: Tellurium output (2D NumPy array where the first column is the time)
+    - dt: reporting timestep
+    - print_results: whether to display warnings when the simulation was too short or coarse to characterize the attractor
+
+    For point attractors, returns a 1D NumPy array of concentrations.
+    For oscillators, returns a dictionary:
+    - "species": list of dicts (one per species), "min" is the minimum concentration, "max" is the maximum, "ftpeaks" is a dict of Fourier peak locations to magnitudes
+    - "orbit": 2D NumPy array of concentrations covering one orbit of the oscillation
+    If the attractor cannot be characterized reliably, returns None.
+    """
     recent = result[-round(10 / dt):, 1:]
     if np.linalg.norm(np.max(recent, axis=0) - np.min(recent, axis=0)) <= (4e-5) * recent.shape[1]:
         # Steady state
@@ -76,7 +97,9 @@ def describe_attractor(result, dt, print_results):
             return None
 
 def equivalent_attractors(a, b):
+    """Determine whether two attractors (in describe_attractor format) are equivalent."""
     if isinstance(a, dict) != isinstance(b, dict):
+        # One attractor is an oscillator, but the other is a single point
         return False
     if isinstance(a, dict):
         # Oscillatory attractor
@@ -104,6 +127,7 @@ def equivalent_attractors(a, b):
         return np.linalg.norm(a - b) < 5e-1
 
 def serialize_attractor(info):
+    """Turn an attractor (in describe_attractor format) into an object tree that can be serialized to JSON."""
     if isinstance(info, dict):
         for species in info['species']:
             ftpeaks = list(species['ftpeaks'].items())
@@ -116,6 +140,18 @@ def serialize_attractor(info):
         return list(info)
 
 def findattractors(runner, ic_sets, time, dt, print_warnings=False):
+    """
+    Find the distinct attractors that can be produced by the given model under the given initial conditions.
+
+    Arguments:
+    - runner: Tellurium model (parameters will not be changed)
+    - ic_sets: iterable of initial condition vectors to try
+    - time: simulation time length
+    - dt: reporting timestep
+    - print_warnings: whether to have describe_attractor print warnings when simulation endpoints cannot be characterized
+
+    Returns a list of distinct attractors.
+    """
     sols = []
     points = round(time / dt) + 1
     for ii, ini_comb in enumerate(ic_sets):
@@ -127,11 +163,34 @@ def findattractors(runner, ic_sets, time, dt, print_warnings=False):
             sols.append(attractor)
     return sols
 
-# Adapted from a script written by Tian Hong 9/21/2020
 def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_oscillators=None, time=50, dt=5, fix_params=None, ignore_ptypes='g', print_results=False):
+    """
+    Test many random parameterizations of a model and report attractors produced by each.
+
+    Arguments:
+    - runner: Tellurium model (parameters will be changed)
+    - n_pts1d: how many initial concentrations to try per gene/FS
+    - n_psets: how many parameter sets to try
+    - min_attractors: minimum number of attractors to report the system
+    - min_oscillators: if set, minimum number of oscillatory attractors to report the system
+    - time: simulation time length (increase if interested in oscillations)
+    - dt: Tellurium reporting timestep (decrease if interested in oscillations, but does not affect accuracy for single-point attractors)
+    - fix_params: dict of parameters to keep fixed: {parameter: value}
+    - ignore_ptypes: character vector of parameter type IDs (K, k, r, n, g) to not change
+    - print_results: whether to print desired multiattractor/oscillatory systems and warnings
+
+    Returns a dictionary that can be serialized to JSON:
+    - "species_names": list of species names in the order used by concentration vectors
+    - "parameter_names": list of parameter names in the order used by parameter set reports
+    - "psets": list of parameterizations that gave rise to the desired dynamics, each a dict:
+      - "parameters": parameter values
+      - "attractors": list of distinct attractors
+    - "ftpoints": how many points were used for Fourier transforms in characterizing oscillations
+    - "tested_psets": how many parameterizations were tested
+    """
 
     # Define initial conditions for simulations
-    # A uniform grid is used. When number of genes is large, consider using Latin Hypercube Sampling
+    # A uniform grid is used - if adapting the script for a large number of genes, consider replacing this with Latin Hypercube Sampling
     n_genes = runner.sv().size
     pts1d = np.linspace(0.0, 3.3, n_pts1d)
     ptsnd = np.tile(pts1d, n_genes).reshape(n_genes, -1)
@@ -166,7 +225,12 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_os
     return results
 
 def networksb(network, model_form='multiplicative_hill'):
-    '''Converts a NetworkX directed graph to an Antimony string.'''
+    """
+    Convert a NetworkX directed graph to an Antimony string.
+
+    By default, the multiplicative form of Hill functions is used.
+    "multiplicative_activation" can be used if trying to reproduce a study that did not include Hill cross-terms or repressions.
+    """
     if not model_form in {'multiplicative_hill', 'multiplicative_activation'}:
         raise ValueError('Unsupported model_form')
     def safenodename(node):
@@ -200,7 +264,7 @@ def networksb(network, model_form='multiplicative_hill'):
     return ''.join(parts)
     
 def networkmodel(network, model_form='multiplicative_hill'):
-    '''Converts a NetworkX directed graph to a Tellurium model.'''
+    """Convert a NetworkX directed graph to a Tellurium model."""
     return te.loada(networksb(network, model_form))
 
 if __name__ == "__main__":

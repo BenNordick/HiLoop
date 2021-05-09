@@ -11,13 +11,17 @@ import random
 from scipy.special import comb
 import scipy.stats
 
+# PyPy virtual environment recommended for performance
+
 def isfused(cycle_sets):
+    """Determine whether all cycles (represented as sets of node IDs) share at least one node."""
     intersection = cycle_sets[0]
     for cycle in cycle_sets[1:]:
         intersection = intersection.intersection(cycle)
     return len(intersection) > 0
 
 def findconnector(cycle_sets):
+    """Determine the index of the connector cycle for a Type-II-like motif, or None if the cycles do not comprise such a motif."""
     for connector_c, connector in enumerate(cycle_sets):
         other1 = cycle_sets[(connector_c + 1) % 3]
         other2 = cycle_sets[(connector_c + 2) % 3]
@@ -28,6 +32,18 @@ def findconnector(cycle_sets):
     return None
 
 def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
+    """
+    Gather high-feedback-related metrics on one network using a sampling approach.
+
+    Arguments:
+    - graph: NetworkX DiGraph
+    - samples: number of cycle tuples to sample
+    - max_motif_size: maximum number of nodes in a motif
+    - max_cycle_length: maximum length of cycle to enumerate
+
+    Returns a tuple of metrics: PFLs, PFL/FL, Type1, Type2, MISA, MixHF, T1/F3, F2/Brdg, Excite, MISSA, MISSA/F, uMISSA.
+    PFL count and feedback loop positivity ratio are computed exactly; others are based on sampling.
+    """
     def safediv(a, b):
         return a / b if b != 0 else 0.0
     cycles = [(frozenset(cycle), ispositive(graph, cycle), cycle, hasrepression(graph, cycle)) for cycle in liuwangcycles.cyclesgenerator(graph, max_cycle_length)]
@@ -83,6 +99,30 @@ def summarize(graph, samples, max_motif_size=None, max_cycle_length=None):
 
 def evaluate(graph, permutations, samples, base_trials=10, use_full_permutation=True, max_nodes_for_sample=None, max_motif_size=None, max_cycle_length=None, 
              fixed_sign_sources=None, try_scc=False, base_callback=None):
+    """
+    Evaluate the enrichment of a network in high-feedback-related metrics relative to permutations.
+
+    Arguments:
+    - graph: original network as a NetworkX DiGraph
+    - permutations: number of permutations to compare against
+    - samples: number of samples to take per permutation
+    - base_trials: how many sampling (summarize function) runs of the original network to average together
+    - use_full_permutation: whether to use rejection sampling of directed configuration models (only suitable for small networks)
+    - max_nodes_for_sample: use subgraphs of permuted networks with limited size (i.e. nested sampling, very much not recommended)
+    - max_motif_size: maximum motif size in nodes to consider
+    - max_cycle_length: maximum length of cycle to enumerate (must be limited for moderately large networks)
+    - fixed_sign_sources: regular expression to match names of nodes whose outgoing edge signs should remain constant (e.g. miR)
+    - try_scc: whether to require strongly connected permutations of strongly connected input (not recommended)
+    - base_callback: callable to receive the list of metrics for the base network early
+
+    Returns a tuple:
+    - list of enrichment empirical p-values (proportion of permutations meeting or exceeding the base network in each metric)
+    - 1-sample t-test result for the hypothesis that the base result is the mean of the permutation population's for each metric
+    - raw results as list of lists, first index specifying metric, second index specifying permutation
+    - list of base network's metrics
+
+    Metrics are ordered as listed in the summarize docstring and explained in the README.
+    """
     require_scc = try_scc and nx.algorithms.is_strongly_connected(graph)
     base_results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # PFLs, PFL/FL, Type1, Type2, MISA, MixHF, T1/F3, F2/Brdg, Excite, MISSA, MISSA/F, uMISSA
     for _ in range(base_trials):

@@ -3,8 +3,16 @@ import networkx as nx
 import random
 import re
 
+# Support functions for making random permutations to regulatory networks
+# PyPy virtual environment recommended for performance
+
 def permutenetwork(graph):
-    '''Randomly moves regulations, preserving degree sequence.'''
+    """
+    Randomly reposition regulations by rejection sampling of directed configuration models.
+
+    Because directed_configuration_model often produces multigraphs which must be rejected, this process is only suitable for small networks.
+    It does not change the original graph.
+    """
     repression_count = len([edge for edge in graph.edges if graph.edges[edge]['repress']])
     in_degrees = [graph.in_degree(n) for n in graph.nodes]
     out_degrees = [graph.out_degree(n) for n in graph.nodes]
@@ -22,7 +30,7 @@ def permutenetwork(graph):
         return flattened
 
 def permuteedgeswaps(graph):
-    '''Attempts a random number of double edge swaps and directed triangle reversals in place.'''
+    """Attempt a random number of double edge swaps and directed triangle reversals in place."""
     for _ in range(int(len(graph.edges) * (1 + 2 * random.random()))):
         edges = list(graph.edges)
         ab, cd = random.sample(edges, 2)
@@ -45,6 +53,7 @@ def permuteedgeswaps(graph):
     return graph
 
 def reversedirectedtriangle(graph, a, b, c):
+    """Try to reverse a directed triangle a -> b -> c -> a in place (if no other existing edges conflict)."""
     legs = [(a, b), (b, c), (c, a)]
     for src, dest in legs:
         if graph.has_edge(dest, src):
@@ -55,7 +64,7 @@ def reversedirectedtriangle(graph, a, b, c):
         graph.add_edge(dest, src, **data)
         
 def permuteregulations(graph):
-    '''Randomly changes which regulations are repressions, maintaining activation and repression counts and directions.'''
+    """Randomly change which regulations are repressions, maintaining activation and repression counts and directions."""
     edges = list(graph.edges)
     copy = graph.copy()
     repressions = 0
@@ -69,6 +78,14 @@ def permuteregulations(graph):
     return copy
 
 def restorefixedsigns(original, graph, pattern):
+    """
+    Swap edge signs in place to ensure that the specified nodes' outgoing edge signs are the same as in the original graph.
+
+    Arguments:
+    - original: the original network as a NetworkX DiGraph
+    - graph: the permuted network (to be corrected) as a NetworkX DiGraph
+    - pattern: regular expression to match node names whose outgoing edge signs should not have been changed (e.g. "miR")
+    """
     fixed_sign_source_nodes = set(n for n in graph.nodes if re.match(pattern, graph.nodes[n]['name']) is not None)
     available_repressions = [e for e in graph.edges if graph.edges[e]['repress'] and e[0] not in fixed_sign_source_nodes]
     available_activations = [e for e in graph.edges if (not graph.edges[e]['repress']) and e[0] not in fixed_sign_source_nodes]
@@ -98,6 +115,7 @@ def restorefixedsigns(original, graph, pattern):
             available_activations.append(old_repression)
 
 def randomsubgraph(graph, max_nodes):
+    """Select a random connected subgraph with the specified number of nodes."""
     queue = deque(maxlen=len(graph.nodes))
     selected = set()
     queue.append(random.sample(graph.nodes, 1)[0])
@@ -113,6 +131,11 @@ def randomsubgraph(graph, max_nodes):
     return graph.subgraph(selected)
 
 def neighborhoodsubgraph(graph, start_node, depth):
+    """
+    Select a subgraph containing all nodes at most the specified depth away from a starting node ID.
+
+    Likely only useful for debugging.
+    """
     current_ring = set([start_node])
     next_ring = set()
     selected = set(current_ring)
@@ -129,6 +152,18 @@ def neighborhoodsubgraph(graph, start_node, depth):
     return graph.subgraph(selected)
 
 def generatepermutations(graph, require_connected, use_full_permutation=True, max_nodes_for_sample=None, fixed_sign_sources=None):
+    """
+    Generate permutations of an input graph.
+
+    Arguments:
+    - graph: NetworkX DiGraph to generate permutations of
+    - require_connected: whether to produce only strongly connected permutations
+    - use_full_permutation: whether to use rejection sampling of directed configuration models
+    - max_nodes_for_sample: produce subgraphs of this size (not recommended)
+    - fixed_sign_sources: regex to match names of nodes whose outgoing edge signs should remain constant
+
+    Yields a tuple of permutation count and permuted DiGraph.
+    """
     last_permutation = graph
     checked_permutations = 0
     while True:

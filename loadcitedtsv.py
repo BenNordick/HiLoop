@@ -3,6 +3,7 @@ import networkx as nx
 import sys
 
 def loadcitedtsv(reader):
+    """Creates a NetworkX DiGraph from a reader of a TRRUST-style TSV."""
     evidence = defaultdict(int)
     directions = {'Activation': 1, 'Repression': -1, 'Unknown': 0}
     graph = nx.DiGraph()

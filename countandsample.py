@@ -4,9 +4,22 @@ import networkx as nx
 import os
 import sampledpvalue
 
+# PyPy virtual environment recommended for performance
+
 header = 'nodes,edges,repressions,samples,maxcyclelen,maxmotifsize,cycles,pfls,count1,count2,countmisa,countmissa,countumissa,sample1,sample2,samplemisa,samplemissa,sampleumissa\n'
 
 def countandsample(graph, output, samples=10000, max_cycle_length=None, max_motif_size=None):
+    """
+    Quantify high-feedback motifs in a network by both systematic counting and cycle tuple sampling, producing CSV output.
+    Useful for calibrating and testing the estimation of counts from samples.
+
+    Arguments:
+    - graph: NetworkX DiGraph representing the network
+    - output: how to report the CSV row: None to print, string to create or append to file with the specified name, or writable object to append to
+    - samples: how many cycle tuples to sample for the sampling approach
+    - max_cycle_length: maximum length of cycle to enumerate (needed for moderately large networks), or None to enumerate all cycles
+    - max_motif_size: maximum number of nodes in a motif
+    """
     cycles = 0
     for _ in cyclesgenerator(graph, max_cycle_length):
         cycles += 1

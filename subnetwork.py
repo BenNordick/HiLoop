@@ -1,6 +1,8 @@
 import argparse
 import networkx as nx
 
+# Simple command-line utility to take the subgraph of a large network induced by specified nodes
+
 parser = argparse.ArgumentParser()
 parser.add_argument('network', type=str, help='input GraphML file')
 parser.add_argument('output', type=str, help='output subnetwork GraphML file')
