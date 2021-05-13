@@ -463,6 +463,7 @@ def plotheatmap(report, figsize=None, labelsize=None, conc_colorbar=False, arcs=
         cg.ax_heatmap.tick_params(axis='x', labelsize=labelsize)
     if bicluster:
         cg.ax_col_dendrogram.set_position(new_gs[0, heatmap_index].get_position(cg.fig))
+    any_arc_columns = arcs is not None and len(arc_pset_types) > 0
     if arcs:
         for fpt_id, summary in enumerate(sorted(arc_pset_types.keys(), key=lambda am: am[0] * 100 + am[1], reverse=True)):
             ax_arcs = cg.fig.add_subplot(new_gs[main_row, heatmap_index + 1 + fpt_id], sharey=cg.ax_heatmap)
@@ -516,7 +517,6 @@ def plotheatmap(report, figsize=None, labelsize=None, conc_colorbar=False, arcs=
                     cg.ax_heatmap.pcolormesh(x_stops, [display_y, display_y + 1], color_stops, shading='gouraud', cmap=mesh.cmap, norm=mesh.norm, rasterized=True, aa=True)
     if fold_dist is not None:
         ax_redundancy = cg.fig.add_subplot(new_gs[main_row, 1], sharey=cg.ax_heatmap)
-        y_stops = np.arange(0, matrix.shape[0] + 1)
         reordered_redundancies = np.zeros((matrix.shape[0], 1))
         for i, redundancy in enumerate(row_redundancies):
             reordered_redundancies[matrix_display_ind[i], 0] = redundancy
@@ -524,14 +524,29 @@ def plotheatmap(report, figsize=None, labelsize=None, conc_colorbar=False, arcs=
         ax_redundancy.tick_params(labelbottom=False, labelleft=False, bottom=False)
         for spine in ['top', 'left', 'bottom']:
             ax_redundancy.spines[spine].set_visible(False)
-        ax_fold_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='15%', loc='lower left')
-        cg.fig.colorbar(fold_mesh, cax=ax_fold_cbar, label='Instances')
-        ax_fold_cbar.yaxis.set_label_position('left')
-    if conc_colorbar:
-        if bicluster:
+        if bicluster and (any_arc_columns or not conc_colorbar):
             ax_corner = cg.fig.add_subplot(new_gs[0, 0])
             ax_corner.axis('off')
-            ax_conc_cbar = mptinset.inset_axes(ax_corner, width='80%', height='25%', loc='center left')
+            ax_fold_cbar = mptinset.inset_axes(ax_corner, width='85%', height='20%', loc='center left')
+            cg.fig.colorbar(fold_mesh, cax=ax_fold_cbar, orientation='horizontal', label='Instances')
+            ax_fold_cbar.xaxis.set_label_position('top')
+            largest_redundancy = reordered_redundancies.max()
+            if largest_redundancy >= 10:
+                tick_step = (largest_redundancy // 10) * 5
+                ax_fold_cbar.xaxis.set_major_locator(mpltick.MultipleLocator(tick_step))
+        else:
+            ax_fold_cbar = mptinset.inset_axes(cg.ax_row_dendrogram, width='15%', height='15%', loc='lower left')
+            cg.fig.colorbar(fold_mesh, cax=ax_fold_cbar, label='Instances')
+            ax_fold_cbar.yaxis.set_label_position('left')
+    if conc_colorbar:
+        if bicluster:
+            if fold_dist is not None and any_arc_columns:
+                ax_conc_cbar = mptinset.inset_axes(cg.ax_col_dendrogram, width='100%', height='100%', 
+                                                   bbox_to_anchor=(1.01, 0.4, 0.19, 0.2), bbox_transform=cg.ax_col_dendrogram.transAxes, borderpad=0)
+            else:
+                ax_corner = cg.fig.add_subplot(new_gs[0, 0])
+                ax_corner.axis('off')
+                ax_conc_cbar = mptinset.inset_axes(ax_corner, width='80%', height='20%', loc='center left')
             cg.fig.colorbar(mesh, cax=ax_conc_cbar, orientation='horizontal', label='Conc.')
             ax_conc_cbar.xaxis.set_label_position('top')
         else:
