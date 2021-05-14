@@ -1,6 +1,8 @@
 import argparse
+import collections
 from itertools import product
 import json
+import warnings
 import networkx as nx
 import numpy as np
 import re
@@ -8,6 +10,8 @@ import scipy.signal as ssig
 import tellurium as te
 
 # CPython virtual environment required
+
+supported_models = ['multiplicative_hill', 'additive_hill', 'multiplicative_activation']
 
 def coalesce_adjacent(points):
     """
@@ -54,7 +58,7 @@ def describe_attractor(result, dt, print_results):
             # Oscillation
             if matching_points[0] > result.shape[0] / 2:
                 if print_results:
-                    print('Warning: late-starting oscillation')
+                    warnings.warn('late-starting oscillation')
                 return None
             last_quarter = result[-round(result.shape[0] / 4):, 1:]
             lq_range = np.max(last_quarter, axis=0) - np.min(last_quarter, axis=0)
@@ -63,7 +67,7 @@ def describe_attractor(result, dt, print_results):
             lh_range = np.max(last_half, axis=0) - np.min(last_half, axis=0)
             if np.any((lh_range - lq_range > 0.02) | (lh_range / lq_range > 1.5)):
                 if print_results:
-                    print('Warning: interrupted dampening')
+                    warnings.warn('interrupted dampening')
                 return None
             species_info = []
             actual_oscillation = False
@@ -93,7 +97,7 @@ def describe_attractor(result, dt, print_results):
                 return None
         else:
             if print_results:
-                print('Warning: unstable endpoint without oscillation')
+                warnings.warn('unstable endpoint without oscillation')
             return None
 
 def equivalent_attractors(a, b):
@@ -198,14 +202,19 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_os
     points = round(time / dt) + 1
 
     # Ranges of parameter values to sample
-    doms = {'K': [0.05, 4.5], 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6], 'g': [-1, 1]}
+    doms = {'K': [0.05, 4.5], 'k': [3.0, 3.3], 'r': [0.9, 0.99], 'n': [1, 6], 'g': [-1, 1], 'b': [0, 1]}
     rands = np.random.uniform(size=(n_psets, len(runner.ps()))) # Random numbers for picking/scaling parameters
 
     results = {'species_names': runner.fs(), 'parameter_names': runner.ps(), 'psets': [], 'ftpoints': points >> 1, 'tested_psets': n_psets}
     for i in range(n_psets):
+        term_weight_groups = collections.defaultdict(list)
         for ip, p in enumerate(runner.ps()):
             if p[0] in ignore_ptypes:
                 continue
+            if p[0] == 'b':
+                # Total term weights for each target in additive_hill must be normalized to 1
+                group_key = p.split('_')[1] if '_' in p else p[1]
+                term_weight_groups[group_key].append(p)
             dom = doms[p[0]]
             runner[p] = dom[0] + rands[i, ip] * (dom[1] - dom[0]) # Set parameter value
             if p[0] == 'n':
@@ -215,6 +224,14 @@ def findmultistability(runner, n_pts1d=5, n_psets=1000, min_attractors=2, min_os
         if fix_params:
             for k, v in fix_params.items():
                 runner[k] = v
+        for group in term_weight_groups.values():
+            # Normalize term weights
+            total_weight = sum(runner[p] for p in group)
+            for p in group:
+                if total_weight > 0:
+                    runner[p] /= total_weight
+                else:
+                    runner[p] = 1 / len(group)
         sols = findattractors(runner, ini_combs, time, dt, print_results)
         n_oscillatory_sols = sum(1 for a in sols if isinstance(a, dict))
         if len(sols) >= min_attractors or (min_oscillators is not None and n_oscillatory_sols >= min_oscillators):
@@ -229,9 +246,10 @@ def networksb(network, model_form='multiplicative_hill'):
     Convert a NetworkX directed graph to an Antimony string.
 
     By default, the multiplicative form of Hill functions is used.
+    "additive_hill" adds (weighted) Hill terms instead of multiplying them.
     "multiplicative_activation" can be used if trying to reproduce a study that did not include Hill cross-terms or repressions.
     """
-    if not model_form in {'multiplicative_hill', 'multiplicative_activation'}:
+    if model_form not in supported_models:
         raise ValueError('Unsupported model_form')
     def safenodename(node):
         return network.nodes[node]['name'].replace('-', '').replace('.', '')
@@ -243,12 +261,26 @@ def networksb(network, model_form='multiplicative_hill'):
     parts = []
     for i, node in enumerate(network.nodes):
         parts.append(f'J{i}: -> X_{safenodename(node)}; g_{safenodename(node)} * (k_{safenodename(node)} * ((1 - r_{safenodename(node)}) + r_{safenodename(node)}')
-        if model_form == 'multiplicative_hill':
+        if '_hill' in model_form:
+            hill_terms = []
+            interaction_ids = []
             for regulator in network.predecessors(node):
                 if network.edges[regulator, node]['repress']:
-                    parts.append(f' * 1 / (1 + {expterm(node, regulator)})')
+                    hill_terms.append(f'1 / (1 + {expterm(node, regulator)})')
                 else:
-                    parts.append(f' * {expterm(node, regulator)} / (1 + {expterm(node, regulator)})')
+                    hill_terms.append(f'{expterm(node, regulator)} / (1 + {expterm(node, regulator)})')
+                interaction_ids.append(interactionid(node, regulator))
+            if model_form == 'multiplicative_hill':
+                for term in hill_terms:
+                    parts.append(' * ')
+                    parts.append(term)
+            elif len(hill_terms) > 0:
+                parts.append(' * (')
+                for i, (term, interaction) in enumerate(zip(hill_terms, interaction_ids)):
+                    if i > 0:
+                        parts.append(' + ')
+                    parts.append(f'b_{interaction} * ({term})')
+                parts.append(')')
         else:
             for regulator in network.predecessors(node):
                 if network.edges[regulator, node]['repress']:
@@ -261,6 +293,10 @@ def networksb(network, model_form='multiplicative_hill'):
         parts.append(f'X_{safenodename(node)} = 0.1\nk_{safenodename(node)} = 3.0\nr_{safenodename(node)} = 0.99\ng_{safenodename(node)} = 1.0\n')
     for regulator, target in network.edges:
         parts.append(f'\nK_{interactionid(target, regulator)} = 1.0; n_{interactionid(target, regulator)} = 4;')
+        if model_form == 'additive_hill':
+            node_regulators = network.in_degree(target)
+            if node_regulators > 0:
+                parts.append(f' b_{interactionid(target, regulator)} = {1 / node_regulators};')
     return ''.join(parts)
     
 def networkmodel(network, model_form='multiplicative_hill'):
@@ -271,6 +307,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('input', type=str, help='input GraphML network (.gxml) or Antimony script (.sb)')
     parser.add_argument('output', type=str, help='output JSON file path')
+    parser.add_argument('--form', type=str, choices=supported_models, default='multiplicative_hill', help='equation form for modeling networks')
     parser.add_argument('--psets', type=int, default=1000, help='number of parameter sets to try')
     parser.add_argument('--attractors', type=int, default=2, help='minimum number of attractors to report multistability')
     parser.add_argument('--oscillators', type=int, help='minimum number of oscillatory attractors to report')
@@ -286,7 +323,7 @@ if __name__ == "__main__":
         with open(args.input) as f:
             r = te.loada(f.read())
     else:
-        r = networkmodel(nx.read_graphml(args.input))
+        r = networkmodel(nx.read_graphml(args.input), model_form=args.form)
     fixed_params = None
     if args.fix:
         fixed_params = {}
@@ -296,6 +333,6 @@ if __name__ == "__main__":
                 if (args.fixfilter is None) or re.match(args.fixfilter, item):
                     fixed_params[item] = float(value.rstrip())
     result = findmultistability(r, n_pts1d=args.concs, n_psets=args.psets, min_attractors=args.attractors, min_oscillators=args.oscillators, time=args.time, dt=args.dt, 
-        fix_params=fixed_params, ignore_ptypes=args.ignoretypes, print_results=(not args.quiet))
+                                fix_params=fixed_params, ignore_ptypes=args.ignoretypes, print_results=(not args.quiet))
     with open(args.output, 'w') as f:
         f.write(json.dumps(result))
