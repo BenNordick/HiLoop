@@ -44,7 +44,7 @@ You can pass `--help` to a script for more details than are covered in this over
 This repository contains several ready-to-use transcriptional regulatory networks:
 
 * `trrust.gxml`: [TRRUST](https://www.grnpedia.org/trrust/) version 2 full human network
-* `huang_emt.gxml`: Epithelial-mesenchymal transition control network examined by [Huang *et al.* 2017](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005456)
+* `huang_emt.gxml`: Epithelial-mesenchymal transition control network examined by [Huang *et al.* 2017](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005456) (includes miRNA)
 * `tcell.gxml`: T cell development network curated by [Kueh & Rothenberg 2011](https://onlinelibrary.wiley.com/doi/abs/10.1002/wsbm.162)
 * `ye_tcell.gxml`: Alternative interpretation of a smaller part of the T cell development network used by [Ye *et al.* 2019](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1006855)
 
@@ -54,6 +54,10 @@ None of the other, minor strongly connected components in any of these networks 
 If you would like to examine only a *specific* part of a network, you can extract the subnetwork induced by a set of nodes (with either HiLoop virtual environment activated):
 
     (hiloop_pypy) $ python subnetwork.py trrust.gxml my_small_network.gxml GATA1 CEBPA MYC WT1
+
+`omnipath.gxml` is a very large network containing transcriptional, miRNA post-transcriptional, and protein destabilization post-translational interactions from the
+[OmniPath database](https://omnipathdb.org/) ([Türei *et al.* 2021](https://www.embopress.org/doi/full/10.15252/msb.20209923)).
+You would likely want to take a subnetwork rather than using it directly.
 
 HiLoop's command-line interface accepts networks in GraphML format.
 Each node should have a string `name` attribute for the gene's name; each edge must have a Boolean `repress` attribute indicating whether it represents a repression.
