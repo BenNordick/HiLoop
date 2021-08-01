@@ -2,10 +2,10 @@ import argparse
 import collections
 import colorsys
 import copy
+import cycler
 import json
 import matplotlib.collections as mplcollect
 import matplotlib.colors as mplcolors
-import matplotlib.lines as mplline
 import matplotlib.patches as mplpatch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mpltick
@@ -178,7 +178,9 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
     fig, ax_main = plt.subplots(figsize=figsize)
     if connect_psets:
         distinct_summaries = list(categorizeattractors(filtered_psets).keys())
-        default_cycler = plt.rcParams['axes.prop_cycle']()
+        default_cycle = cycler.cycler(color=['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:gray', 'tab:olive', 'tab:cyan'])
+        default_cycler = default_cycle()
+        defocus_default_cycler = plt.rcParams['axes.prop_cycle']()
         for i, pset in enumerate(filtered_psets):
             pset_matrix = np.array(caricatureattractors(pset['attractors']))
             pset_xy = reduction.reduce(pset_matrix)
@@ -187,13 +189,13 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
             has_oscillator = not all(point_mask)
             z = i
             linewidth = None
-            oscwidth = 1.5
-            dotsize = None
+            oscwidth = 1.6
+            dotsize = 36.0
             defocused = False
             summary = summarizeattractors(pset)
             if focus or focus_osc:
                 if (focus_osc and has_oscillator) or (focus and specificrulevalue(focus, summary, default=False)):
-                    z += len(filtered_psets)
+                    z += len(filtered_psets) + 1
                 elif hide_defocused:
                     continue
                 else:
@@ -208,8 +210,8 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
                     lum *= random.uniform(0.85, 1.1)
                     sat *= random.uniform(0.8, 1.0)
             elif defocused:
-                next_prop = next(default_cycler)
-                color_spec = next_prop['color'] if 'color' in next_prop else ax_main._get_lines.get_next_color()
+                next_prop = next(defocus_default_cycler)
+                color_spec = next_prop['color']
                 r, g, b = mplcolors.to_rgb(color_spec)
                 hue, sat, lum = colorsys.rgb_to_hls(r, g, b)
             if defocused:
@@ -218,10 +220,10 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
             if color_code or defocused:
                 pset_color = colorsys.hls_to_rgb(hue, lum, sat)
             else:
-                pset_color = None
-            line = ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], lw=linewidth, color=pset_color, zorder=z)
-            pset_color = line[0].get_color()
-            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], s=dotsize, color=pset_color, zorder=z)
+                pset_color = next(default_cycler)['color']
+            ax_main.plot(sorted_attractors[:, 0], sorted_attractors[:, 1], lw=linewidth, color=pset_color, zorder=z)
+            pointprops = {'s': dotsize} if defocused or not contour else {'linewidths': 1.0, 'edgecolors': 'white', 's': dotsize * 1.3}
+            ax_main.scatter(pset_xy[point_mask, 0], pset_xy[point_mask, 1], color=pset_color, zorder=z, **pointprops)
             for osc in (a for a in pset['attractors'] if isoscillator(a)):
                 vertices = np.array(osc['orbit'])
                 projected_vertices = reduction.reduce(vertices)
@@ -243,11 +245,18 @@ def plotattractors(report, reduction, figsize=None, labelsize=None, connect_pset
         bin_x, bin_y = np.mgrid[(density_points[:, 0].min() - 0.15):(density_points[:, 0].max() + 0.15):80j, (density_points[:, 1].min() - 0.15):(density_points[:, 1].max() + 0.15):80j]
         density = np.exp(kde.score_samples(np.vstack((bin_x.flatten(), bin_y.flatten())).T))
         sorted_densities = np.sort(density.flatten())
-        cdf = np.cumsum(sorted_densities) / np.sum(sorted_densities)
-        cutoff_indices = [np.where(cdf > percentile)[0][0] for percentile in np.linspace(contour, 0.99, 6)]
-        levels = [sorted_densities[c] for c in cutoff_indices]
-        widths = np.linspace(0.5, 1.4, 6)
-        ax_main.contour(bin_x, bin_y, density.reshape(bin_x.shape), levels, linewidths=widths, colors='black', zorder=(len(filtered_psets) * 3), alpha=0.6)
+        total_density = np.sum(sorted_densities)
+        cdf = np.cumsum(sorted_densities) / total_density
+        if connect_psets:
+            cutoff_indices = [np.where(cdf > percentile)[0][0] for percentile in np.linspace(contour, 1, 5)[:-1]]
+            levels = [sorted_densities[c] for c in cutoff_indices] + [total_density]
+            colors = ['#c65ff560', '#af36e388', '#b300ff90', '#8500e2a0']
+            ax_main.contourf(bin_x, bin_y, density.reshape(bin_x.shape), levels, colors=colors, zorder=len(filtered_psets))
+        else:
+            cutoff_indices = [np.where(cdf > percentile)[0][0] for percentile in np.linspace(contour, 0.9, 6)]
+            levels = [sorted_densities[c] for c in cutoff_indices]
+            widths = np.linspace(0.5, 1.4, 6)
+            ax_main.contour(bin_x, bin_y, density.reshape(bin_x.shape), levels, linewidths=widths, colors='black', zorder=(len(filtered_psets) * 3), alpha=0.6)
     if square:
         ax_main.axis('square')
     elif reduction.equalscale():

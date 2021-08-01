@@ -20,11 +20,12 @@ def colorsubgraph(graph, r, y, b):
         return 'solid' if ispositive(graph, cycle) else 'dashed'
     return rendergraph.colorcycles(graph, [(r, 'red', cyclestyle(graph, r)), (y, 'gold2', cyclestyle(graph, y)), (b, 'blue', cyclestyle(graph, b))])
 
-labelnodeparams = {'fontsize': 9.0, 'width': 0.1, 'height': 0.1, 'margin': 0.05, 'fontname': 'DejaVuSerif'}
+labelnodeparams = {'fontsize': 9.0, 'width': 0.1, 'height': 0.1, 'margin': 0.05, 'fontname': 'DejaVuSerif', 'style': 'filled', 'fillcolor': '#F0F0F0'}
 
 def logobase(**kwargs):
     """Create a PyGraphviz graph for a logo."""
     ag = pygraphviz.AGraph(bgcolor='#D0D0D0', strict=False, directed=True, ranksep=0.3, **kwargs)
+    ag.edge_attr['penwidth'] = 1.4
     ag.edge_attr['arrowsize'] = 0.8
     return ag
 
@@ -51,16 +52,16 @@ def logo_3fused(fusion_nodes, positivities):
     styles = [('solid' if positive else 'dashed') for positive in positivities]
     tips = [('normal' if positive else 'tee') for positive in positivities]
     ag = logobase(nodesep=0.6)
-    ag.add_node('L3', shape='point', width=0.001, color='blue')
+    ag.add_node('L3', shape='point', width=0.001, style='invis')
     ag.add_node('X', label=',\n'.join(fusion_nodes), **labelnodeparams)
-    ag.add_edge('L3', 'X', arrowhead=tips[2], color='blue', style=styles[2])
-    ag.add_edge('X', 'L3', arrowhead='none', color='blue', style=styles[2])
-    ag.add_node('L1', shape='point', width=0.001, color='red')
-    ag.add_edge('X', 'L1', arrowhead='none', color='red', style=styles[0])
-    ag.add_edge('L1', 'X', arrowhead=tips[0], color='red', style=styles[0])
-    ag.add_node('L2', shape='point', width=0.001, color='gold')
-    ag.add_edge('X', 'L2', arrowhead='none', color='gold', style=styles[1])
-    ag.add_edge('L2', 'X', arrowhead=tips[1], color='gold', style=styles[1])
+    ag.add_edge('L3', 'X', arrowhead=tips[2], color='blue', style=styles[2], tailclip=False)
+    ag.add_edge('X', 'L3', arrowhead='none', color='blue', style=styles[2], headclip=False)
+    ag.add_node('L1', shape='point', width=0.001, style='invis')
+    ag.add_edge('X', 'L1', arrowhead='none', color='red', style=styles[0], headclip=False)
+    ag.add_edge('L1', 'X', arrowhead=tips[0], color='red', style=styles[0], tailclip=False)
+    ag.add_node('L2', shape='point', width=0.001, style='invis')
+    ag.add_edge('X', 'L2', arrowhead='none', color='gold', style=styles[1], headclip=False)
+    ag.add_edge('L2', 'X', arrowhead=tips[1], color='gold', style=styles[1], tailclip=False)
     return ag
 
 def logo_2bridged(fusion1, fusion2, positivities, half12_positive, half21_positive):
@@ -100,6 +101,7 @@ parser.add_argument('--maxsharing', type=int, help='maximum number of nodes in c
 parser.add_argument('--reduceedges', action='store_true', help='randomly drop some extra edges')
 parser.add_argument('--requirenodes', nargs='+', type=str, help='node(s) that must be present in the subnetwork')
 parser.add_argument('--usesubgraph', nargs='+', type=str, help='nodes whose induced subgraph to search')
+parser.add_argument('--top', nargs='+', type=str, help='nodes to keep at the top')
 args = parser.parse_args()
 
 if args.images and args.logo and any(name.endswith('.svg') for name in args.images):
@@ -116,6 +118,11 @@ if args.usesubgraph:
     used_ids = [node_ids[name] for name in args.usesubgraph]
     # Maintain specified order to allow finagling of priority (for dot layout)
     graph = nx.relabel_nodes(graph.subgraph(used_ids), {key: i for i, key in enumerate(used_ids)})
+
+top_ids = None
+if args.top:
+    top_names = set(args.top)
+    top_ids = {n for n in graph.nodes if graph.nodes[n]['name'] in top_names}
 
 def shouldcheck2fused():
     """Determine whether examples of 2-cycle motifs still need to be found."""
@@ -159,6 +166,10 @@ def reduceedges(subgraph, cycles):
 
 def createimage(graph, filename_placeholders, logo_func):
     """Save an already colored graph to image files, with logo if requested."""
+    if top_ids:
+        for e in graph.edges:
+            if e[1] in top_ids:
+                graph.edges[e]['constraint'] = False
     if args.logo:
         # Graphviz does not really handle subgraphs with different layout parameters, so render the logo graph separately and paste it in as an image
         logo_ag = logo_func()

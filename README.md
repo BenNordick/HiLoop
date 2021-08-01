@@ -216,7 +216,7 @@ You can specify system types to highlight with the `--focus` option, e.g. `--foc
 
     (hiloop_cpy) $ python summarizemultistability.py modeling/ye_tcell.json modeling/ye_tcell_scatter.png scatterplot --reduction TCF1/PU1 --line --focus 4
 
-To add contour lines to a hexbin or scatter-line plot, pass the `--contour` switch, optionally specifying the proportion of attractor density to keep outside the lowest contour (default 0.1).
+To add contour lines or shading to a hexbin or scatter-line plot respectively, pass the `--contour` switch, optionally specifying the proportion of attractor density to keep outside the lowest contour (default 0.1).
 
 For cluster-heatmaps, use the `heatmap` command.
 To add a colorbar for the heatmap concentration values, pass `--colorbar`.
