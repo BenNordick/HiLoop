@@ -102,6 +102,7 @@ parser.add_argument('--reduceedges', action='store_true', help='randomly drop so
 parser.add_argument('--requirenodes', nargs='+', type=str, help='node(s) that must be present in the subnetwork')
 parser.add_argument('--usesubgraph', nargs='+', type=str, help='nodes whose induced subgraph to search')
 parser.add_argument('--top', nargs='+', type=str, help='nodes to keep at the top')
+parser.add_argument('--bold', type=float, default=2.0, help='width in points of bold nodes\' outlines')
 args = parser.parse_args()
 
 if args.images and args.logo and any(name.endswith('.svg') for name in args.images):
@@ -278,7 +279,7 @@ while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
                     if args.images:
                         colored = colorsubgraph(subgraph, red, [], blue)
                         for n in intersection:
-                            colored.nodes[n]['penwidth'] = 2.0
+                            colored.nodes[n]['penwidth'] = args.bold
                         if kind == 'excitable':
                             logo_func = lambda: logo_excitable([subgraph.nodes[n]['name'] for n in intersection])
                         else:
@@ -331,7 +332,7 @@ while shouldcheck2fused() or shouldcheck3fused() or shouldcheckbridged():
             if args.images:
                 colored = colorsubgraph(subgraph, *[cycle for cycle, _, _ in chosen_cycles])
                 for n in intersection:
-                    colored.nodes[n]['penwidth'] = 2.0
+                    colored.nodes[n]['penwidth'] = args.bold
                 logo_func = lambda: logo_3fused({subgraph.nodes[n]['name'] for n in intersection}, loop_signs)
                 createimage(colored, (current_id, kind, len(colored.edges)), logo_func)
             continue
