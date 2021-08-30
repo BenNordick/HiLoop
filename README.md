@@ -59,6 +59,9 @@ If you would like to examine only a *specific* part of a network, you can extrac
 [OmniPath database](https://omnipathdb.org/) ([Türei *et al.* 2021](https://www.embopress.org/doi/full/10.15252/msb.20209923)).
 You would likely want to take a subnetwork rather than using it directly.
 
+**Note:** The common networks whose data is provided in HiLoop format are not necessarily under the same license (MIT) as HiLoop.
+They may have restrictions on e.g. commercial use.
+
 HiLoop's command-line interface accepts networks in GraphML format.
 Each node should have a string `name` attribute for the gene's name; each edge must have a Boolean `repress` attribute indicating whether it represents a repression.
 You can [manipulate graphs](https://networkx.org/documentation/stable/reference/classes/digraph.html) and [save them](https://networkx.org/documentation/stable/reference/readwrite/graphml.html) using the NetworkX library or any other tool that supports GraphML.
