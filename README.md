@@ -4,7 +4,8 @@ Toolbox for exploring high-feedback motifs in gene regulatory networks.
 
 If you use HiLoop in your work, please cite:
 
-> Benjamin Nordick and Tian Hong (*in review*). Identification, visualization, and analysis of interconnected feedback loops in gene regulatory networks.
+> Benjamin Nordick and Tian Hong (2021). Identification, visualization, statistical analysis and mathematical modeling of high-feedback loops in gene regulatory networks.
+> *BMC Bioinformatics* **22**, 481. https://doi.org/10.1186/s12859-021-04405-z
 
 ## Setup
 
